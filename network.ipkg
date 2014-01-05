@@ -1,0 +1,8 @@
+package network
+
+sourcedir = src
+modules = Network.Socket
+opts = "-p neweffects"
+makefile = MakefileC
+
+objs = 

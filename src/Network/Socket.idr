@@ -32,6 +32,9 @@ instance ToCode SocketFamily where
   toCode AF_INET   = 2
   toCode AF_INET6  = 10
 
+getSocketFamily : Int -> Maybe SocketFamily
+getSocketFamily i = Prelude.List.lookup i [(0, AF_UNSPEC), (2, AF_INET), (10, AF_INET6)]
+
 -- Socket Types.
 data SocketType = NotASocket  -- Not a socket, used in certain operations
                 | Stream      -- TCP
@@ -65,11 +68,13 @@ SocketDescriptor = Int
 data SocketAddress = IPv4Addr Int Int Int Int
                    | IPv6Addr -- Not implemented (yet)
                    | Hostname String
+                   | InvalidAddress -- Used when there's a parse error
 
 instance Show SocketAddress where
   show (IPv4Addr i1 i2 i3 i4) = concat $ Prelude.List.intersperse "." (map show [i1, i2, i3, i4])
   show IPv6Addr = "NOT IMPLEMENTED YET"
   show (Hostname host) = host
+  show InvalidAddress = "Invalid"
 
 Port : Type
 Port = Int
@@ -139,9 +144,29 @@ listen sock = do
     getErrno
   else return 0
 
+-- Parses a textual representation of an IPv4 address into a SocketAddress
+private
+parseIPv4 : String -> SocketAddress
+parseIPv4 str = case splitted of
+                     (i1 :: i2 :: i3 :: i4 :: _) => IPv4Addr i1 i2 i3 i4
+                     _ => InvalidAddress
+  where toInt' : String -> Integer
+        toInt' = cast
+        toInt : String -> Int
+        toInt s = fromInteger $ toInt' s
+        splitted : List Int
+        splitted = map toInt (Prelude.Strings.split (\c => c == '.') str)
+
+
 -- Retrieves a socket address from a sockaddr pointer
 getSockAddr : Ptr -> IO SocketAddress
-getSockAddr ptr = ?mv -- maybe tomorrow...
+getSockAddr ptr = do
+  addr_family_int <- mkForeign (FFun "idrnet_sockaddr_family" [FPtr] FInt) ptr
+  case getSocketFamily addr_family_int of
+    Just AF_INET => do
+      ipv4_addr <- mkForeign (FFun "idrnet_sockaddr_ipv4" [FPtr] FString) ptr
+      return $ parseIPv4 ipv4_addr
+    Just AF_INET6 => return IPv6Addr
 
 -- Accepts a connection from a listening socket.
 accept : Socket -> IO (Either SocketError (Socket, SocketAddress))
@@ -158,4 +183,45 @@ accept sock = do
     free sockaddr_ptr
     return $ Right ((MkSocket accept_res fam ty p_num), sockaddr)
 
+send : Socket -> String -> IO (Either SocketError ByteLength)
+send sock dat = do
+  send_res <- mkForeign (FFun "idrnet_send" [FInt, FString] FInt) (descriptor sock) dat
+  if send_res == (-1) then
+    map Left getErrno
+  else
+    return $ Right send_res
+
+
+recv : Socket -> Int -> IO (Either SocketError (String, Int))
+recv sock len = do
+  -- Firstly make the request, get some kind of recv structure which
+  -- contains the result of the recv and possibly the retrieved payload
+  recv_struct_ptr <- mkForeign (FFun "idrnet_recv_str" [FInt, FInt] FPtr) (descriptor sock) len
+  recv_res <- mkForeign (FFun "idrnet_get_recv_res" [FPtr] FInt) recv_struct_ptr
+  if recv_res == (-1) then do
+    errno <- getErrno
+    free recv_struct_ptr
+    return $ Left errno
+  else do
+    payload <- mkForeign (FFun "idrnet_get_recv_payload" [FPtr] FString) recv_struct_ptr
+    free recv_struct_ptr
+    return $ Right (payload, recv_res)
+
+
+-- Sends the data in a given memory location
+sendBuf : Socket -> Ptr -> Int -> IO (Either SocketError ByteLength)
+sendBuf sock ptr len = do
+  send_res <- mkForeign (FFun "idrnet_send_buf" [FInt, FPtr, FInt] FInt) (descriptor sock) ptr len
+  if send_res == (-1) then
+    map Left getErrno
+  else 
+    return $ Right send_res
+
+recvBuf : Socket -> Ptr -> Int -> IO (Either SocketError ByteLength)
+recvBuf sock ptr len = do
+  recv_res <- mkForeign (FFun "idrnet_recv_buf" [FInt, FPtr, FInt] FInt) (descriptor sock) ptr len
+  if (recv_res == (-1)) then
+    map Left getErrno
+  else
+    return $ Right recv_res
 
