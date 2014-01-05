@@ -3,7 +3,7 @@ CFLAGS = `idris --include`
 
 all : idrisnet.o bindata.o
 
-idris_net.o : idrisnet.c idrisnet.h
+idrisnet.o : idrisnet.c idrisnet.h
 
 bindata.o : bindata.c bindata.h
 

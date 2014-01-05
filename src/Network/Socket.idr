@@ -120,8 +120,8 @@ socket sf st pn = do
 -- Returns 0 on success, an error code otherwise.
 bind : Socket -> SocketAddress -> Port -> IO Int
 bind sock addr port = do
-  bind_res <- (mkForeign (FFun "idrnet_bind" [FInt, FString, FInt] FInt) 
-                           (descriptor sock) (show addr) port)
+  bind_res <- (mkForeign (FFun "idrnet_bind" [FInt, FInt, FInt, FString, FInt] FInt) 
+                           (descriptor sock) (family sock) (socketType sock) (show addr) port)
   if bind_res == (-1) then -- error
     getErrno
   else return 0 -- Success
@@ -130,8 +130,8 @@ bind sock addr port = do
 -- Returns 0 on success, and an error number on error.
 connect : Socket -> SocketAddress -> Port -> IO Int
 connect sock addr port = do
-  conn_res <- (mkForeign (FFun "idrnet_connect" [FInt, FString, FInt] FInt)
-                           (descriptor sock) (show addr) port)
+  conn_res <- (mkForeign (FFun "idrnet_connect" [FInt, FInt, FInt, FString, FInt] FInt)
+                           (descriptor sock) (family sock) (socketType sock) (show addr) port)
   if conn_res == (-1) then
     getErrno
   else return 0
@@ -174,7 +174,7 @@ accept sock = do
   -- We need a pointer to a sockaddr structure. This is then passed into
   -- idrnet_accept and populated. We can then query it for the SocketAddr and free it.
   sockaddr_ptr <- mkForeign (FFun "idrnet_create_sockaddr" [] FPtr) 
-  accept_res <- mkForeign (FFun "idrnet_accept" [FInt] FInt) (descriptor sock)
+  accept_res <- mkForeign (FFun "idrnet_accept" [FInt, FPtr] FInt) (descriptor sock) sockaddr_ptr
   if accept_res == (-1) then
     map Left getErrno
   else do
@@ -185,7 +185,7 @@ accept sock = do
 
 send : Socket -> String -> IO (Either SocketError ByteLength)
 send sock dat = do
-  send_res <- mkForeign (FFun "idrnet_send" [FInt, FString] FInt) (descriptor sock) dat
+  send_res <- mkForeign (FFun "idrnet_send" [FInt, FString, FInt] FInt) (descriptor sock) dat
   if send_res == (-1) then
     map Left getErrno
   else
@@ -196,7 +196,7 @@ recv : Socket -> Int -> IO (Either SocketError (String, Int))
 recv sock len = do
   -- Firstly make the request, get some kind of recv structure which
   -- contains the result of the recv and possibly the retrieved payload
-  recv_struct_ptr <- mkForeign (FFun "idrnet_recv_str" [FInt, FInt] FPtr) (descriptor sock) len
+  recv_struct_ptr <- mkForeign (FFun "idrnet_recv" [FInt, FInt] FPtr) (descriptor sock) len
   recv_res <- mkForeign (FFun "idrnet_get_recv_res" [FPtr] FInt) recv_struct_ptr
   if recv_res == (-1) then do
     errno <- getErrno
