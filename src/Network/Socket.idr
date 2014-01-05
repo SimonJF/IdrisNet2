@@ -74,11 +74,21 @@ instance Show SocketAddress where
 Port : Type
 Port = Int
 
+-- Backlog used within listen() call -- number of incoming calls
+BACKLOG : Int
+BACKLOG = 20
+
+
 -- Allocates an amount of memory given by the ByteLength parameter.
 -- Used to allocate a mutable pointer to be given to the Recv functions.
 private
 alloc : ByteLength -> IO Ptr
 alloc bl = mkForeign (FFun "idrnet_malloc" [FInt] FPtr) bl
+
+-- Frees a given pointer
+private
+free : Ptr -> IO ()
+free ptr = mkForeign (FFun "idrnet_free" [FPtr] FUnit) ptr
 
 record Socket : Type where
   MkSocket : (descriptor : SocketDescriptor) ->
@@ -109,7 +119,43 @@ bind sock addr port = do
                            (descriptor sock) (show addr) port)
   if bind_res == (-1) then -- error
     getErrno
-  else
-    return 0 -- Success
+  else return 0 -- Success
+
+-- Connects to a given address and port.
+-- Returns 0 on success, and an error number on error.
+connect : Socket -> SocketAddress -> Port -> IO Int
+connect sock addr port = do
+  conn_res <- (mkForeign (FFun "idrnet_connect" [FInt, FString, FInt] FInt)
+                           (descriptor sock) (show addr) port)
+  if conn_res == (-1) then
+    getErrno
+  else return 0
+
+-- Listens on a bound socket.
+listen : Socket -> IO Int
+listen sock = do
+  listen_res <- mkForeign (FFun "listen" [FInt, FInt] FInt) (descriptor sock) BACKLOG
+  if listen_res == (-1) then
+    getErrno
+  else return 0
+
+-- Retrieves a socket address from a sockaddr pointer
+getSockAddr : Ptr -> IO SocketAddress
+getSockAddr ptr = ?mv -- maybe tomorrow...
+
+-- Accepts a connection from a listening socket.
+accept : Socket -> IO (Either SocketError (Socket, SocketAddress))
+accept sock = do
+  -- We need a pointer to a sockaddr structure. This is then passed into
+  -- idrnet_accept and populated. We can then query it for the SocketAddr and free it.
+  sockaddr_ptr <- mkForeign (FFun "idrnet_create_sockaddr" [] FPtr) 
+  accept_res <- mkForeign (FFun "idrnet_accept" [FInt] FInt) (descriptor sock)
+  if accept_res == (-1) then
+    map Left getErrno
+  else do
+    let (MkSocket _ fam ty p_num) = sock
+    sockaddr <- getSockAddr sockaddr_ptr
+    free sockaddr_ptr
+    return $ Right ((MkSocket accept_res fam ty p_num), sockaddr)
 
 
