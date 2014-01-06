@@ -9,6 +9,8 @@ module Network.Socket
 %include C "<netdb.h>"
 -- %link C "idrisnet.o"
 
+%access public
+
 ByteLength : Type
 ByteLength = Int
 
@@ -116,12 +118,15 @@ socket sf st pn = do
     return $ Right (MkSocket socket_res sf st pn)
 
 
+close : Socket -> IO ()
+close sock = mkForeign (FFun "close" [FInt] FUnit) (descriptor sock)
+
 -- Binds a socket to the given socket address and port.
 -- Returns 0 on success, an error code otherwise.
 bind : Socket -> SocketAddress -> Port -> IO Int
 bind sock addr port = do
   bind_res <- (mkForeign (FFun "idrnet_bind" [FInt, FInt, FInt, FString, FInt] FInt) 
-                           (descriptor sock) (family sock) (socketType sock) (show addr) port)
+                           (descriptor sock) (toCode $ family sock) (toCode $ socketType sock) (show addr) port)
   if bind_res == (-1) then -- error
     getErrno
   else return 0 -- Success
@@ -131,7 +136,7 @@ bind sock addr port = do
 connect : Socket -> SocketAddress -> Port -> IO Int
 connect sock addr port = do
   conn_res <- (mkForeign (FFun "idrnet_connect" [FInt, FInt, FInt, FString, FInt] FInt)
-                           (descriptor sock) (family sock) (socketType sock) (show addr) port)
+                           (descriptor sock) (toCode $ family sock) (toCode $ socketType sock) (show addr) port)
   if conn_res == (-1) then
     getErrno
   else return 0
@@ -185,14 +190,14 @@ accept sock = do
 
 send : Socket -> String -> IO (Either SocketError ByteLength)
 send sock dat = do
-  send_res <- mkForeign (FFun "idrnet_send" [FInt, FString, FInt] FInt) (descriptor sock) dat
+  send_res <- mkForeign (FFun "idrnet_send" [FInt, FString] FInt) (descriptor sock) dat
   if send_res == (-1) then
     map Left getErrno
   else
     return $ Right send_res
 
 
-recv : Socket -> Int -> IO (Either SocketError (String, Int))
+recv : Socket -> Int -> IO (Either SocketError (String, ByteLength))
 recv sock len = do
   -- Firstly make the request, get some kind of recv structure which
   -- contains the result of the recv and possibly the retrieved payload
