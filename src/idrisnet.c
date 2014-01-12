@@ -104,11 +104,14 @@ void* idrnet_recv(int sockfd, int len) {
     idrnet_recv_result* res_struct = 
         (idrnet_recv_result*) malloc(sizeof(idrnet_recv_result));
 
-    void* buf = malloc(len);
+    char* buf = malloc(len + 1);
     int recv_res = recv(sockfd, buf, len, 0);
-
     res_struct->result = recv_res;
-    res_struct->payload = buf;
+    
+    if (recv_res > 0) { // Data was received
+        buf[recv_res + 1] = 0x00; // Null-term, so Idris can interpret it
+    }
+    res_struct->payload = (void*) buf;
     return (void*) res_struct;
 }
 
@@ -124,5 +127,16 @@ void* idrnet_get_recv_payload(void* res_struct) {
     return (((idrnet_recv_result*) res_struct)->payload);
 }
 
+void idrnet_free_recv_struct(void* res_struct) {
+    idrnet_recv_result* i_res_struct = 
+        (idrnet_recv_result*) res_struct;
+    if (i_res_struct->payload != NULL) {
+        free(i_res_struct->payload);
+    }
+    free(res_struct);
+}
 
+int idrnet_errno() {
+    return errno;
+}
 

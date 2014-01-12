@@ -1,8 +1,8 @@
 package network
 
 sourcedir = src
-modules = Network.Socket
+modules = Network.Socket, Network.TCP.TCPClient
 opts = "-p neweffects"
 makefile = MakefileC
 
-objs = bindata.c, bindata.h, idrisnet.c, idrisnet.h
+objs = bindata.o, bindata.h, idrisnet.o, idrisnet.h

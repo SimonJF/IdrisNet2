@@ -49,5 +49,5 @@ int idrnet_recv_buf(int sockfd, void* buf, int len);
 // Receive structure accessors
 int idrnet_get_recv_res(void* res_struct);
 void* idrnet_get_recv_payload(void* res_struct);
-
+void idrnet_free_recv_struct(void* res_struct);
 #endif

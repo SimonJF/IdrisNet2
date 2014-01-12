@@ -3,6 +3,8 @@ module Network.TCP.TCPClient
 import Network.Socket
 import Effects
 
+%access public
+
 data ClientConnected : Type where
   CC : Socket -> ClientConnected
 
@@ -110,6 +112,9 @@ instance Handler TCPClient IO where
     either recv_res (\err => if (err == EAGAIN) then 
                                k (RecoverableError err) (CC sock)
                              else 
-                               k (FatalError err) (ES sock))
+                               if (err == 0) then -- socket closed
+                                 k (ConnectionClosed) ()
+                               else
+                                 k (FatalError err) (ES sock))
                     (\res => k (OperationSuccess res) (CC sock))
 

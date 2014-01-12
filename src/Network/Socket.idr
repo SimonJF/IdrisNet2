@@ -4,10 +4,10 @@
 module Network.Socket
 
 %include C "idrisnet.h"
-%include C "<sys/types.h>" -- Pushing my luck, might need to re-export everything
-%include C "<sys/sockets.h>" 
-%include C "<netdb.h>"
--- %link C "idrisnet.o"
+%include C "sys/types.h" -- Pushing my luck, might need to re-export everything
+%include C "sys/socket.h" 
+%include C "netdb.h"
+%link C "idrisnet.o"
 
 %access public
 
@@ -197,6 +197,10 @@ send sock dat = do
     return $ Right send_res
 
 
+freeRecvStruct : Ptr -> IO ()
+freeRecvStruct p = mkForeign (FFun "idrnet_free_recv_struct" [FPtr] FUnit) p
+
+
 recv : Socket -> Int -> IO (Either SocketError (String, ByteLength))
 recv sock len = do
   -- Firstly make the request, get some kind of recv structure which
@@ -205,12 +209,16 @@ recv sock len = do
   recv_res <- mkForeign (FFun "idrnet_get_recv_res" [FPtr] FInt) recv_struct_ptr
   if recv_res == (-1) then do
     errno <- getErrno
-    free recv_struct_ptr
+    freeRecvStruct recv_struct_ptr
     return $ Left errno
-  else do
-    payload <- mkForeign (FFun "idrnet_get_recv_payload" [FPtr] FString) recv_struct_ptr
-    free recv_struct_ptr
-    return $ Right (payload, recv_res)
+  else 
+    if recv_res == 0 then do
+       freeRecvStruct recv_struct_ptr
+       return $ Left 0
+    else do
+       payload <- mkForeign (FFun "idrnet_get_recv_payload" [FPtr] FString) recv_struct_ptr
+       freeRecvStruct recv_struct_ptr
+       return $ Right (payload, recv_res)
 
 
 -- Sends the data in a given memory location
