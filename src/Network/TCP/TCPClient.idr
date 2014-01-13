@@ -27,42 +27,38 @@ interpOperationRes ConnectionClosed = ()
 
 -- TCP Client Effect
 data TCPClient : Effect where
-  Connect      : SocketAddress -> Port -> TCPClient (SocketOperationRes Socket) 
-                                                    () (interpConnectRes)
-  Close        : TCPClient () (ClientConnected) (const ())
-  Finalise     : TCPClient () (ErrorState) (const ())
-  WriteString  : String -> TCPClient (SocketOperationRes ByteLength) 
-                                     (ClientConnected) 
-                                     (interpOperationRes)
+  Connect      : SocketAddress -> Port -> {() ==> interpConnectRes result}
+                                          TCPClient (SocketOperationRes Socket)
+  Close        : { ClientConnected ==> ()} TCPClient () 
+  Finalise     : { ErrorState ==> () } TCPClient () 
+  WriteString  : String -> { ClientConnected ==> interpOperationRes result}
+                           TCPClient (SocketOperationRes ByteLength) 
   ReadString   : ByteLength -> 
-                 TCPClient (SocketOperationRes (String, ByteLength)) 
-                           (ClientConnected) 
-                           (interpOperationRes)
+                 { ClientConnected ==> interpOperationRes result }
+                 TCPClient (SocketOperationRes (String, ByteLength))
 
 
 TCPCLIENT : Type -> EFFECT
 TCPCLIENT t = MkEff t TCPClient
 
 
-tcpConnect : SocketAddress -> Port -> EffM IO (SocketOperationRes Socket) 
-                                              [TCPCLIENT ()] 
-                                              (\x => [TCPCLIENT (interpConnectRes x)])
+tcpConnect : SocketAddress -> Port -> { [TCPCLIENT ()] ==> [TCPCLIENT (interpConnectRes result)] }
+                                      EffM IO (SocketOperationRes Socket) 
 tcpConnect sa port = (Connect sa port)
 
-tcpClose : EffM IO () [TCPCLIENT (ClientConnected)] (\_ => [TCPCLIENT ()])
+tcpClose : { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT ()] } EffM IO ()
 tcpClose = Close
 
-tcpFinalise : EffM IO () [TCPCLIENT (ErrorState)] (\_ => [TCPCLIENT ()])
+tcpFinalise : { [TCPCLIENT (ErrorState)] ==> [TCPCLIENT ()] } EffM IO () 
 tcpFinalise = Finalise
 
-tcpSend : String -> EffM IO (SocketOperationRes ByteLength)
-                            [TCPCLIENT (ClientConnected)]
-                            (\x => [TCPCLIENT (interpOperationRes x)])
+tcpSend : String -> { [TCPCLIENT (ClientConnected)] ==> 
+                      [TCPCLIENT (interpOperationRes result)] }
+                     EffM IO (SocketOperationRes ByteLength)
 tcpSend dat = (WriteString dat)
 
-tcpRecv : ByteLength -> EffM IO (SocketOperationRes (String, ByteLength))
-                                [TCPCLIENT (ClientConnected)]
-                                (\x => [TCPCLIENT (interpOperationRes x)])
+tcpRecv : ByteLength -> { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT (interpOperationRes result)] } 
+                        EffM IO (SocketOperationRes (String, ByteLength))
 tcpRecv bl = (ReadString bl)
 
 
