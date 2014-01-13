@@ -1,5 +1,6 @@
 -- Network.TCP.TCPClient: TCP Client
 module Network.TCP.TCPClient
+import Network.TCP.TCPCommon
 import Network.Socket
 import Effects
 
@@ -11,11 +12,6 @@ data ClientConnected : Type where
 -- 
 data ErrorState : Type where
   ES : Socket -> ErrorState
-
-data SocketOperationRes a = OperationSuccess a
-                          | FatalError SocketError -- Most socket errors are fatal.
-                          | RecoverableError SocketError -- EAGAIN / EWOULDBLOCK
-                          | ConnectionClosed
 
 -- Interprets the result of 
 interpConnectRes : SocketOperationRes a -> Type
@@ -43,9 +39,6 @@ data TCPClient : Effect where
                            (ClientConnected) 
                            (interpOperationRes)
 
--- Would be nice to pull these in from C...
-EAGAIN : Int 
-EAGAIN = 11
 
 TCPCLIENT : Type -> EFFECT
 TCPCLIENT t = MkEff t TCPClient
@@ -84,7 +77,8 @@ instance Handler TCPClient IO where
            conn_res <- connect sock sa port
            if (conn_res == 0) then -- Success
              k (OperationSuccess sock) (CC sock)
-           else
+           else do
+             close sock
              k (FatalError conn_res) ()
 
   handle (CC sock) (Close) k = do

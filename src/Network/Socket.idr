@@ -85,6 +85,9 @@ Port = Int
 BACKLOG : Int
 BACKLOG = 20
 
+-- FIXME: This *must* be pulled in from C
+EAGAIN : Int 
+EAGAIN = 11
 
 -- Allocates an amount of memory given by the ByteLength parameter.
 -- Used to allocate a mutable pointer to be given to the Recv functions.

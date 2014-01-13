@@ -1,7 +1,7 @@
 package network
 
 sourcedir = src
-modules = Network.Socket, Network.TCP.TCPClient
+modules = Network.Socket, Network.TCP.TCPClient, Network.TCP.TCPCommon
 opts = "-p neweffects"
 makefile = MakefileC
 
