@@ -175,6 +175,7 @@ getSockAddr ptr = do
       ipv4_addr <- mkForeign (FFun "idrnet_sockaddr_ipv4" [FPtr] FString) ptr
       return $ parseIPv4 ipv4_addr
     Just AF_INET6 => return IPv6Addr
+    Just AF_UNSPEC => return IPv6Addr -- FIXME: Horrible hack
 
 -- Accepts a connection from a listening socket.
 accept : Socket -> IO (Either SocketError (Socket, SocketAddress))

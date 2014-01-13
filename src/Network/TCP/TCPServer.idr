@@ -3,6 +3,8 @@ import Effects
 import Network.Socket
 import Network.TCP.TCPCommon
 
+%access public
+
 -- Closed -> Listening
 
 -- Alright, so for a basic server, we just want a Client pointer
