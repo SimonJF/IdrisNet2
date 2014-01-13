@@ -57,14 +57,12 @@ interpBindRes _ = ()
    ClientConnected state, upon acceptance of a client. This will be given in the
    form of an argument to Accept. The effectual program must end by closing the socket. -}
 data TCPServerClient : Effect where
-  WriteString : String -> TCPServerClient (SocketOperationRes ByteLength)
-                                          (ClientConnected) 
-                                          (interpClientOperationRes)
-  ReadString : ByteLength -> TCPServerClient (SocketOperationRes (String, ByteLength))
-                                             (ClientConnected)
-                                             (interpClientOperationRes)
-  CloseClient : TCPServerClient () (ClientConnected) (const ())
-  FinaliseClient : TCPServerClient () (ClientError) (const ())
+  WriteString : String -> { ClientConnected ==> interpClientOperationRes result}
+                          TCPServerClient (SocketOperationRes ByteLength)
+  ReadString : ByteLength -> { ClientConnected ==> interpClientOperationRes result }
+                             TCPServerClient (SocketOperationRes (String, ByteLength))
+  CloseClient : { ClientConnected ==> () } TCPServerClient () 
+  FinaliseClient : { ClientError ==> () }  TCPServerClient () 
 
 TCPSERVERCLIENT : Type -> EFFECT 
 TCPSERVERCLIENT t = MkEff t TCPServerClient
@@ -118,26 +116,20 @@ instance Handler TCPServerClient IO where
 
 data TCPServer : Effect where
   -- Bind a socket to a given address and port
-  Bind : SocketAddress -> Port -> TCPServer (SocketOperationRes ()) 
-                                            () (interpBindRes)
+  Bind : SocketAddress -> Port -> { () ==> interpBindRes result }
+                                  TCPServer (SocketOperationRes ()) 
   -- Listen
-  Listen : TCPServer (SocketOperationRes ()) (ServerBound) (interpListenRes)
-{-
-  -- Write to a client socket
-  WriteString : Socket -> String -> TCPServer (SocketOperationRes ByteLength) 
-                                      (ServerListening) (interpOperationRes)
-  -- Read from a client socket
-  ReadString : Socket -> ByteLength -> TCPServer (SocketOperationRes ByteLength)
-                                        (ServerListening) (interpOperationRes)
-                                        -}
+  Listen : { ServerBound ==> interpListenRes result } 
+           TCPServer (SocketOperationRes ()) 
+  -- Accept
   Accept :  ClientProgram t ->
+            { ServerListening ==> interpOperationRes result } 
             TCPServer (SocketOperationRes t)
-                      (ServerListening) (interpOperationRes)
 
   -- Need separate ones for each. It'd be nice to condense these into 1...
-  CloseBound : TCPServer () (ServerBound) (const ())
-  CloseListening : TCPServer () (ServerListening) (const ())
-  Finalise : TCPServer () (ServerError) (const ())
+  CloseBound : { ServerBound ==> () } TCPServer () 
+  CloseListening : { ServerListening ==> () } TCPServer () 
+  Finalise : { ServerError ==> () } TCPServer () 
   
 
 TCPSERVER : Type -> EFFECT
