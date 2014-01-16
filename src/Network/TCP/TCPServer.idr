@@ -1,5 +1,7 @@
 module Network.TCP.TCPServer
 import Effects
+import Network.Packet
+import Network.PacketLang
 import Network.Socket
 import Network.TCP.TCPCommon
 
@@ -63,6 +65,16 @@ data TCPServerClient : Effect where
                              TCPServerClient (SocketOperationRes (String, ByteLength))
   CloseClient : { ClientConnected ==> () } TCPServerClient () 
   FinaliseClient : { ClientError ==> () }  TCPServerClient () 
+  WritePacket  : (pl : PacketLang) ->
+                 (mkTy pl) ->
+                 { ClientConnected ==> interpClientOperationRes result }
+                 TCPServerClient (SocketOperationRes ByteLength)
+
+  ReadPacket   : (pl : PacketLang) ->
+                 Length -> -- I really dislike this sod being here
+                 { ClientConnected ==> interpClientOperationRes result }
+                 TCPServerClient (SocketOperationRes (Maybe (mkTy pl, ByteLength)))
+
 
 TCPSERVERCLIENT : Type -> EFFECT 
 TCPSERVERCLIENT t = MkEff t TCPServerClient
@@ -84,8 +96,24 @@ closeClient = CloseClient
 finaliseClient : { [TCPSERVERCLIENT (ClientError)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
 finaliseClient = FinaliseClient
 
+tcpWritePacket : (pl : PacketLang) ->
+                 (mkTy pl) ->
+                 { [TCPSERVERCLIENT ClientConnected] ==> 
+                   [TCPSERVERCLIENT (interpClientOperationRes result)] }
+                 Eff IO (SocketOperationRes ByteLength)
+tcpWritePacket pl dat = (WritePacket pl dat)
+
+tcpReadPacket : (pl : PacketLang) ->
+                Length -> -- TODO: Ideally we won't need this parameter
+                { [TCPSERVERCLIENT ClientConnected] ==> 
+                  [TCPSERVERCLIENT (interpClientOperationRes result)] }
+                Eff IO (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
+tcpReadPacket pl len = (ReadPacket pl len)
+
+
 ClientProgram : Type -> Type
-ClientProgram t = {[TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()]} Eff IO t
+ClientProgram t = {[TCPSERVERCLIENT (ClientConnected)] ==> 
+                   [TCPSERVERCLIENT ()]} Eff IO t
 
 instance Handler TCPServerClient IO where
   handle (CC sock addr) (WriteString str) k = do
@@ -113,6 +141,37 @@ instance Handler TCPServerClient IO where
     close sock $> k () ()
   handle (CE sock) (FinaliseClient) k = 
     close sock $> k () ()
+
+  handle (CC sock addr) (WritePacket pl dat) k = do
+    (pckt, len) <- marshal pl dat
+    let (RawPckt pckt') = pckt
+    send_res <- sendBuf sock pckt' len
+    case send_res of
+         Left err => 
+          if err == EAGAIN then
+            k (RecoverableError err) (CC sock addr)
+          else
+            k (FatalError err) (CE sock)
+         Right bl => k (OperationSuccess bl) (CC sock addr)
+
+  handle (CC sock addr) (ReadPacket pl len) k = do
+    ptr <- alloc len
+    recv_res <- recvBuf sock ptr len
+    case recv_res of
+         Left err =>
+           if err == EAGAIN then
+             k (RecoverableError err) (CC sock addr)
+           else if err == 0 then
+             k (ConnectionClosed) ()
+           else
+             k (FatalError err) (CE sock)
+         Right bl => do
+           res <- unmarshal pl (RawPckt ptr) bl
+           free ptr
+           -- The OperationSuccess depends on the actual network-y
+           -- part, not the unmarshalling. If the unmarshalling fails,
+           -- we still keep the connection open.
+           k (OperationSuccess res) (CC sock addr) 
 
 data TCPServer : Effect where
   -- Bind a socket to a given address and port

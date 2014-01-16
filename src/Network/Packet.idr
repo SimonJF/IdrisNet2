@@ -1,4 +1,5 @@
 module Network.Packet
+import Language.Reflection
 import Network.PacketLang
 import Network.Socket
 import Effects

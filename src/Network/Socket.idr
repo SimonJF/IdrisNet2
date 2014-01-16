@@ -41,7 +41,7 @@ getSocketFamily i = Prelude.List.lookup i [(0, AF_UNSPEC), (2, AF_INET), (10, AF
 data SocketType = NotASocket  -- Not a socket, used in certain operations
                 | Stream      -- TCP
                 | Datagram    -- UDP
-                | Raw         -- Raw sockets. A guy can dream.
+                | RawSocket   -- Raw sockets. A guy can dream.
 
 instance Show SocketType where
   show NotASocket = "Not a socket"
@@ -91,12 +91,12 @@ EAGAIN = 11
 
 -- Allocates an amount of memory given by the ByteLength parameter.
 -- Used to allocate a mutable pointer to be given to the Recv functions.
-private
+-- private
 alloc : ByteLength -> IO Ptr
 alloc bl = mkForeign (FFun "idrnet_malloc" [FInt] FPtr) bl
 
 -- Frees a given pointer
-private
+-- private
 free : Ptr -> IO ()
 free ptr = mkForeign (FFun "idrnet_free" [FPtr] FUnit) ptr
 

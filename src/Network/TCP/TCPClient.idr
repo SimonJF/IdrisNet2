@@ -47,7 +47,7 @@ data TCPClient : Effect where
   ReadPacket   : (pl : PacketLang) ->
                  Length -> -- I really dislike this sod being here
                  { ClientConnected ==> interpOperationRes result }
-                 TCPClient (SocketOperationRes (mkTy pl, ByteLength))
+                 TCPClient (SocketOperationRes (Maybe (mkTy pl, ByteLength)))
                  
 
 
@@ -79,18 +79,17 @@ tcpRecv bl = (ReadString bl)
 tcpWritePacket : (pl : PacketLang) ->
                  (mkTy pl) ->
                  { [TCPCLIENT ClientConnected] ==> 
-                   [TCPCLIENT (interpOperationRes result) }
+                   [TCPCLIENT (interpOperationRes result)] }
                  Eff IO (SocketOperationRes ByteLength)
 tcpWritePacket pl dat = (WritePacket pl dat)
 
 tcpReadPacket : (pl : PacketLang) ->
                 Length -> -- TODO: Ideally we won't need this parameter
-                { ClientConnected ==> interpOperationRes result }
-                Eff IO (SocketOperationRes (Maybe (mkTy pl, ByteLength)) }
+                { [TCPCLIENT ClientConnected] ==> [TCPCLIENT (interpOperationRes result)] }
+                Eff IO (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
 tcpReadPacket pl len = (ReadPacket pl len)
 
 instance Handler TCPClient IO where
-
   handle () (Connect sa port) k = do
     -- Firstly create a socket
     sock_res <- socket AF_INET Stream 0 
@@ -134,4 +133,35 @@ instance Handler TCPClient IO where
                                else
                                  k (FatalError err) (ES sock))
                     (\res => k (OperationSuccess res) (CC sock))
+
+  handle (CC sock) (WritePacket pl dat) k = do
+    (pckt, len) <- marshal pl dat
+    let (RawPckt pckt') = pckt
+    send_res <- sendBuf sock pckt' len
+    case send_res of
+         Left err => 
+          if err == EAGAIN then
+            k (RecoverableError err) (CC sock)
+          else
+            k (FatalError err) (ES sock)
+         Right bl => k (OperationSuccess bl) (CC sock)
+
+  handle (CC sock) (ReadPacket pl len) k = do
+    ptr <- alloc len
+    recv_res <- recvBuf sock ptr len
+    case recv_res of
+         Left err =>
+           if err == EAGAIN then
+             k (RecoverableError err) (CC sock)
+           else if err == 0 then
+             k (ConnectionClosed) ()
+           else
+             k (FatalError err) (ES sock)
+         Right bl => do
+           res <- unmarshal pl (RawPckt ptr) bl
+           free ptr
+           -- The OperationSuccess depends on the actual network-y
+           -- part, not the unmarshalling. If the unmarshalling fails,
+           -- we still keep the connection open.
+           k (OperationSuccess res) (CC sock) 
 
