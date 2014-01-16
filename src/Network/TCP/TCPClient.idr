@@ -1,5 +1,7 @@
 -- Network.TCP.TCPClient: TCP Client
 module Network.TCP.TCPClient
+import Network.PacketLang
+import Network.Packet
 import Network.TCP.TCPCommon
 import Network.Socket
 import Effects
@@ -37,30 +39,55 @@ data TCPClient : Effect where
                  { ClientConnected ==> interpOperationRes result }
                  TCPClient (SocketOperationRes (String, ByteLength))
 
+  WritePacket  : (pl : PacketLang) ->
+                 (mkTy pl) ->
+                 { ClientConnected ==> interpOperationRes result }
+                 TCPClient (SocketOperationRes ByteLength)
+
+  ReadPacket   : (pl : PacketLang) ->
+                 Length -> -- I really dislike this sod being here
+                 { ClientConnected ==> interpOperationRes result }
+                 TCPClient (SocketOperationRes (mkTy pl, ByteLength))
+                 
+
 
 TCPCLIENT : Type -> EFFECT
 TCPCLIENT t = MkEff t TCPClient
 
 
 tcpConnect : SocketAddress -> Port -> { [TCPCLIENT ()] ==> [TCPCLIENT (interpConnectRes result)] }
-                                      EffM IO (SocketOperationRes Socket) 
+                                      Eff IO (SocketOperationRes Socket) 
 tcpConnect sa port = (Connect sa port)
 
-tcpClose : { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT ()] } EffM IO ()
+tcpClose : { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT ()] } Eff IO ()
 tcpClose = Close
 
-tcpFinalise : { [TCPCLIENT (ErrorState)] ==> [TCPCLIENT ()] } EffM IO () 
+tcpFinalise : { [TCPCLIENT (ErrorState)] ==> [TCPCLIENT ()] } Eff IO () 
 tcpFinalise = Finalise
 
 tcpSend : String -> { [TCPCLIENT (ClientConnected)] ==> 
                       [TCPCLIENT (interpOperationRes result)] }
-                     EffM IO (SocketOperationRes ByteLength)
+                     Eff IO (SocketOperationRes ByteLength)
 tcpSend dat = (WriteString dat)
 
-tcpRecv : ByteLength -> { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT (interpOperationRes result)] } 
-                        EffM IO (SocketOperationRes (String, ByteLength))
+tcpRecv : ByteLength -> 
+          { [TCPCLIENT (ClientConnected)] ==> 
+            [TCPCLIENT (interpOperationRes result)] } 
+          Eff IO (SocketOperationRes (String, ByteLength))
 tcpRecv bl = (ReadString bl)
 
+tcpWritePacket : (pl : PacketLang) ->
+                 (mkTy pl) ->
+                 { [TCPCLIENT ClientConnected] ==> 
+                   [TCPCLIENT (interpOperationRes result) }
+                 Eff IO (SocketOperationRes ByteLength)
+tcpWritePacket pl dat = (WritePacket pl dat)
+
+tcpReadPacket : (pl : PacketLang) ->
+                Length -> -- TODO: Ideally we won't need this parameter
+                { ClientConnected ==> interpOperationRes result }
+                Eff IO (SocketOperationRes (Maybe (mkTy pl, ByteLength)) }
+tcpReadPacket pl len = (ReadPacket pl len)
 
 instance Handler TCPClient IO where
 

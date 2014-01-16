@@ -70,22 +70,22 @@ TCPSERVERCLIENT t = MkEff t TCPServerClient
 
 tcpSend : String -> { [TCPSERVERCLIENT (ClientConnected)] ==> 
                       [TCPSERVERCLIENT (interpClientOperationRes result)] }
-                    EffM IO (SocketOperationRes ByteLength)
+                    Eff IO (SocketOperationRes ByteLength)
 tcpSend s = (WriteString s)
 
 tcpRecv : ByteLength -> { [TCPSERVERCLIENT (ClientConnected)] ==> 
                           [TCPSERVERCLIENT (interpClientOperationRes result)] }
-                        EffM IO (SocketOperationRes (String, ByteLength))
+                        Eff IO (SocketOperationRes (String, ByteLength))
 tcpRecv bl = (ReadString bl)
 
-closeClient : { [TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()] } EffM IO ()
+closeClient : { [TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
 closeClient = CloseClient
 
-finaliseClient : { [TCPSERVERCLIENT (ClientError)] ==> [TCPSERVERCLIENT ()] } EffM IO ()
+finaliseClient : { [TCPSERVERCLIENT (ClientError)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
 finaliseClient = FinaliseClient
 
 ClientProgram : Type -> Type
-ClientProgram t = {[TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()]} EffM IO t
+ClientProgram t = {[TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()]} Eff IO t
 
 instance Handler TCPServerClient IO where
   handle (CC sock addr) (WriteString str) k = do
@@ -138,25 +138,25 @@ TCPSERVER t = MkEff t TCPServer
 {- TCP Accessor Functions -}
 
 bind : SocketAddress -> Port -> { [TCPSERVER ()] ==> [TCPSERVER (interpBindRes result)] } 
-                                EffM IO (SocketOperationRes ())
+                                Eff IO (SocketOperationRes ())
 bind sa p = (Bind sa p)
 
 listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] } 
-         EffM IO (SocketOperationRes ())
+         Eff IO (SocketOperationRes ())
 listen = Listen
 
 accept : ClientProgram t -> 
          { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)] }
-         EffM IO (SocketOperationRes t)
+         Eff IO (SocketOperationRes t)
 accept prog = (Accept prog)
 
-closeBound : { [TCPSERVER (ServerBound)] ==> [TCPSERVER ()] } EffM IO ()
+closeBound : { [TCPSERVER (ServerBound)] ==> [TCPSERVER ()] } Eff IO ()
 closeBound = CloseBound
 
-closeListening : { [TCPSERVER (ServerListening)] ==> [TCPSERVER ()] } EffM IO ()
+closeListening : { [TCPSERVER (ServerListening)] ==> [TCPSERVER ()] } Eff IO ()
 closeListening = CloseListening
 
-finaliseServer : { [TCPSERVER (ServerError)] ==> [TCPSERVER ()] } EffM IO ()
+finaliseServer : { [TCPSERVER (ServerError)] ==> [TCPSERVER ()] } Eff IO ()
 finaliseServer = Finalise
 
 {- Handler Functions -}

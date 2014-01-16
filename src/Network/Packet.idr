@@ -242,9 +242,12 @@ marshal pl dat = do
 
 public 
 -- | Given a packet language and a RawPacket, unmarshals the packet
-unmarshal : (pl : PacketLang) -> RawPacket -> Length -> IO (Maybe (mkTy pl))
+unmarshal : (pl : PacketLang) -> 
+            RawPacket -> 
+            Length -> 
+            IO (Maybe (mkTy pl, ByteLength))
 unmarshal pl pckt len =
-  return $ map fst (unmarshal' (ActivePacketRes pckt 0 len) pl)
+  return $ (unmarshal' (ActivePacketRes pckt 0 len) pl)
   
 
 public
