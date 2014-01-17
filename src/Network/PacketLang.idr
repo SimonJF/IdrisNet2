@@ -71,13 +71,15 @@ data Chunk : Type where
   Prop : (P : Proposition) -> Chunk
 
 infixl 5 //
+--infixl 5 ##
 
 mutual
   -- Requires two propositions, and evidence that they're true.
   -- For example, if we have P_AND P_BOOL P_BOOL, we'd need two 'oh' proofs.
   -- If we had two P_EQ propositions, we'd need two reflexivity proofs.
   data Both : Proposition -> Proposition -> Type where
-    MkBoth : (a : Proposition) -> (b : Proposition) -> (propTy a) -> (propTy b) -> Both a b
+    MkBoth : (a : Proposition) -> (b : Proposition) -> 
+             (propTy a) -> (propTy b) -> Both a b
 
   -- Decode propositions into Idris types.
   propTy : Proposition -> Type
@@ -154,9 +156,15 @@ bit : (w : Int) -> {default tactics { refine oh; solve;}
 bit w {p} = Bit w p
 
 -- syntax bit [x] = Bit x oh
-syntax bits [n] = CHUNK (bit n)
+syntax bits [n] = (CHUNK (bit n))
 --syntax bytes [n] = CHUNK (bit (n * 8))
 --syntax bounded [x] = BInt x oh
-syntax check [p] = CHUNK (Prop (P_BOOL p))
-syntax lstring [n] = CHUNK (LString n)
-syntax cstring = CHUNK (CString)
+syntax check [p] = (CHUNK (Prop (P_BOOL p)))
+syntax lstring [n] = (CHUNK (LString n))
+syntax cstring = (CHUNK (CString))
+syntax listn [n] [t] = (LISTN n t)
+syntax list [t] = (LIST t)
+syntax p_if [p] then [t] else [e] = (IF p t e)
+syntax p_either [c1] [c2] = (c1 // c2)
+syntax [x] "##" [y] = (x ** y)
+

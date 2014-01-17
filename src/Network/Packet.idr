@@ -28,6 +28,11 @@ data RawPacket = RawPckt Ptr
 data ActivePacket : Type where
   ActivePacketRes : RawPacket -> BytePos -> Length -> ActivePacket
 
+public
+dumpPacket : RawPacket -> Length -> IO ()
+dumpPacket (RawPckt pckt) len =
+  mkForeign (FFun "dumpPacket" [FPtr, FInt] FUnit) pckt len
+
 
 {- Internal FFI Functions -}
 foreignCreatePacket : Int -> IO RawPacket
@@ -58,11 +63,11 @@ foreignGetBits (RawPckt pckt) start end =
 marshalChunk : ActivePacket -> (c : Chunk) -> (chunkTy c) -> IO Length
 marshalChunk (ActivePacketRes pckt pos p_len) (Bit w p) (BInt dat p2) = do
   let len = chunkLength (Bit w p) (BInt dat p2)
-  foreignSetBits pckt pos (pos + w) dat
+  foreignSetBits pckt pos (pos + w - 1) dat
   return len
 marshalChunk (ActivePacketRes pckt pos p_len) CString str = do
   let len = chunkLength CString str
-  putStrLn $ "CStr length: " ++ (show len)
+  --putStrLn $ "CStr length: " ++ (show len)
   foreignSetString pckt pos str len '\0'
   return len
 -- TODO: This is wrong, need to set the length in there explicitly
@@ -116,7 +121,7 @@ unmarshal' : ActivePacket -> (pl : PacketLang) -> Maybe (mkTy pl, Length)
 unmarshalCString' : ActivePacket ->  
                     Int -> 
                     IO (Maybe (List Char, Length))
-unmarshalCString' (ActivePacketRes pckt pos p_len) i with (pos + 8 < p_len)
+unmarshalCString' (ActivePacketRes pckt pos p_len) i with (pos + 8 <= p_len)
   -- Firstly we need to check whether we're within the bounds of the packet.
   -- If not, then the parse has failed. 
   -- If we're within bounds, we need to read the next character, and recursively
@@ -134,7 +139,10 @@ unmarshalCString' (ActivePacketRes pckt pos p_len) i with (pos + 8 < p_len)
       rest <- unmarshalCString' (ActivePacketRes pckt (pos + 8) p_len) (i + 8)
       case rest of Just (xs, j) => return $ Just (char::xs, j + 8)
                    Nothing => return Nothing
-  | False = return Nothing
+  | False = do --putStrLn $ "Pos: " ++ (show pos)
+               --putStrLn $ "p_len: " ++ (show p_len) 
+               --putStrLn "Exceeded boundary, d00d"
+               return Nothing
 
 unmarshalCString : ActivePacket -> IO (Maybe (String, Length))
 unmarshalCString (ActivePacketRes pckt pos p_len) = do
@@ -147,7 +155,7 @@ unmarshalCString (ActivePacketRes pckt pos p_len) = do
 unmarshalLString' : ActivePacket -> Int -> IO (List Char)
 unmarshalLString' ap 0 = return []
 unmarshalLString' (ActivePacketRes pckt pos p_len) n = do
-  next_byte <- foreignGetBits pckt pos (pos + 8)
+  next_byte <- foreignGetBits pckt pos (pos + 7)
   let char = chr next_byte
   rest <- unmarshalLString' (ActivePacketRes pckt (pos + 8) p_len) (n - 1)
   return $ (char :: rest)
@@ -158,9 +166,9 @@ unmarshalLString : ActivePacket -> Int -> IO String
 unmarshalLString ap n = map pack (unmarshalLString' ap n)
 
 unmarshalBits : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
-unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + width) < p_len)
+unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + width) <= p_len)
   | True = do
-    res <- foreignGetBits pckt pos (pos + width)
+    res <- foreignGetBits pckt pos (pos + width - 1)
     return $ Just $ (BInt res (believe_me oh), width) -- Have to trust it, as it's from C
   | False = return Nothing
 
@@ -169,7 +177,7 @@ unmarshalChunk ap (Bit width p) = unmarshalBits ap (Bit width p)
 unmarshalChunk ap CString = unmarshalCString ap
 unmarshalChunk (ActivePacketRes pckt pos p_len) (LString n) =
   -- Do bounds checking now, if it passes then we're golden later on
-  if pos + (8 * n) < p_len then do
+  if pos + (8 * n) <= p_len then do
     res <- unmarshalLString (ActivePacketRes pckt pos p_len) n
     return $ Just (res, (8 * n))
   else
@@ -216,9 +224,15 @@ unmarshal' ap (IF True yes no) = unmarshal' ap yes
 -- If neither correct, return Nothing.
 unmarshal' ap (x // y) = do
   let x_res = unmarshal' ap x
-  let y_res = unmarshal' ap y
-  (maybe (maybe Nothing (\(y_res', len) => Just $ (Right y_res', len)) y_res)
-         (\(x_res', len) => Just $ (Left x_res', len)) x_res)
+  --let y_res = 
+  case x_res of
+       Just (pckt, len) => Just (Left pckt, len)
+       Nothing => case (unmarshal' ap y) of
+                    Just (pckt, len) => Just (Right pckt, len)
+                    Nothing => Nothing
+                    -- map (\(pckt, len) => (Right pckt, len)) (unmarshal' ap y)
+--  (maybe (maybe Nothing (\(y_res', len) => Just $ (Right y_res', len)) y_res)
+  --       (\(x_res', len) => Just $ (Left x_res', len)) x_res)
 unmarshal' ap (LIST pl) = Just (unmarshalList ap pl)
 unmarshal' ap (LISTN n pl) = unmarshalVect ap pl n
 unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
@@ -239,6 +253,8 @@ marshal pl dat = do
   let pckt_len = bitLength pl dat
   pckt <- foreignCreatePacket pckt_len
   len <- marshal' (ActivePacketRes pckt 0 pckt_len) pl dat
+  --putStrLn "Marshalling: "
+  --dumpPacket pckt 1024
   return (pckt, len)
 
 public 
@@ -247,18 +263,15 @@ unmarshal : (pl : PacketLang) ->
             RawPacket -> 
             Length -> 
             IO (Maybe (mkTy pl, ByteLength))
-unmarshal pl pckt len =
-  return $ (unmarshal' (ActivePacketRes pckt 0 len) pl)
+unmarshal pl pckt len = do
+  --putStrLn "Unmarshalling: "
+  --dumpPacket pckt 1024
+  return $ (unmarshal' (ActivePacketRes pckt 0 len) pl) 
   
 
 public
 -- | Destroys a RawPacket
 freePacket : RawPacket -> IO ()
 freePacket (RawPckt pckt) = mkForeign (FFun "freePacket" [FPtr] FUnit) pckt
-
-public
-dumpPacket : RawPacket -> Length -> IO ()
-dumpPacket (RawPckt pckt) len =
-  mkForeign (FFun "dumpPacket" [FPtr, FInt] FUnit) pckt len
 
 
