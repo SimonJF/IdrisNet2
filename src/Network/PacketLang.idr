@@ -61,6 +61,9 @@ val (BInt i p) = i
 data Chunk : Type where
   -- Bits must be at least 1 wide
   Bit : (width : Int) -> so (width > 0) -> Chunk
+  -- Boolean value, stored as one bit.
+  -- Convenience, so we can marshal / unmarshal directly as a Bool
+  CBool : Chunk
   -- Native C String, null terminated
   CString : Chunk
   -- String with fixed bounded length
@@ -97,7 +100,7 @@ chunkTy (Bit w p) = Bounded w -- FIXME, take into account bit width
 chunkTy CString = String
 chunkTy (LString i) = String
 chunkTy (Prop p) = propTy p
-
+chunkTy (CBool) = Bool
 
 
 -- Packet Language
@@ -122,9 +125,11 @@ mutual
 
 
 {- Chunk length in bits -}
+total
 bitLength : (pl : PacketLang) -> mkTy pl -> Length
 chunkLength : (c : Chunk) -> chunkTy c -> Length
-chunkLength (Bit w p) x1 = w
+chunkLength (Bit w p) _ = w
+chunkLength CBool _ = 1
 -- TODO: This doesn't take into account if there's a null character
 -- within the string itself. I had something nice using span earlier,
 -- but it didn't work (probably due to a library bug)
@@ -167,4 +172,4 @@ syntax list [t] = (LIST t)
 syntax p_if [p] then [t] else [e] = (IF p t e)
 syntax p_either [c1] [c2] = (c1 // c2)
 syntax [x] "##" [y] = (x ** y)
-
+syntax bool = (CHUNK (CBool))

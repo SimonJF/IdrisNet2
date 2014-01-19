@@ -65,6 +65,10 @@ marshalChunk (ActivePacketRes pckt pos p_len) (Bit w p) (BInt dat p2) = do
   let len = chunkLength (Bit w p) (BInt dat p2)
   foreignSetBits pckt pos (pos + w - 1) dat
   return len
+marshalChunk (ActivePacketRes pckt pos p_len) CBool b = do
+  let bit = if b then 1 else 0
+  foreignSetBits pckt pos pos bit
+  return (chunkLength CBool b)
 marshalChunk (ActivePacketRes pckt pos p_len) CString str = do
   let len = chunkLength CString str
   --putStrLn $ "CStr length: " ++ (show len)
@@ -172,8 +176,16 @@ unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + width)
     return $ Just $ (BInt res (believe_me oh), width) -- Have to trust it, as it's from C
   | False = return Nothing
 
+unmarshalBool : ActivePacket -> IO (Maybe (Bool, Length))
+unmarshalBool (ActivePacketRes pckt pos p_len) with ((pos + 1) <= p_len)
+  | True = do
+      res <- foreignGetBits pckt pos pos
+      return (Just (res == 1, 1))
+  | False = return Nothing
+
 unmarshalChunk : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
 unmarshalChunk ap (Bit width p) = unmarshalBits ap (Bit width p) 
+unmarshalChunk ap CBool = unmarshalBool ap 
 unmarshalChunk ap CString = unmarshalCString ap
 unmarshalChunk (ActivePacketRes pckt pos p_len) (LString n) =
   -- Do bounds checking now, if it passes then we're golden later on

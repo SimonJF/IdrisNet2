@@ -226,7 +226,7 @@ recv sock len = do
 
 
 -- Sends the data in a given memory location
-sendBuf : Socket -> Ptr -> Int -> IO (Either SocketError ByteLength)
+sendBuf : Socket -> Ptr -> ByteLength -> IO (Either SocketError ByteLength)
 sendBuf sock ptr len = do
   send_res <- mkForeign (FFun "idrnet_send_buf" [FInt, FPtr, FInt] FInt) (descriptor sock) ptr len
   if send_res == (-1) then
@@ -234,7 +234,7 @@ sendBuf sock ptr len = do
   else 
     return $ Right send_res
 
-recvBuf : Socket -> Ptr -> Int -> IO (Either SocketError ByteLength)
+recvBuf : Socket -> Ptr -> ByteLength -> IO (Either SocketError ByteLength)
 recvBuf sock ptr len = do
   recv_res <- mkForeign (FFun "idrnet_recv_buf" [FInt, FPtr, FInt] FInt) (descriptor sock) ptr len
   if (recv_res == (-1)) then
