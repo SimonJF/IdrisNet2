@@ -184,7 +184,9 @@ data TCPServer : Effect where
   Accept :  ClientProgram t ->
             { ServerListening ==> interpOperationRes result } 
             TCPServer (SocketOperationRes t)
-
+  ForkAccept : ClientProgram () ->
+               { ServerListening ==> interpOperationRes result } 
+               TCPServer (SocketOperationRes ())
   -- Need separate ones for each. It'd be nice to condense these into 1...
   CloseBound : { ServerBound ==> () } TCPServer () 
   CloseListening : { ServerListening ==> () } TCPServer () 
@@ -204,10 +206,15 @@ listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] }
          Eff IO (SocketOperationRes ())
 listen = Listen
 
-accept : ClientProgram t -> 
+accept : (ClientProgram t) -> 
          { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)] }
          Eff IO (SocketOperationRes t)
 accept prog = (Accept prog)
+
+forkAccept : (ClientProgram ()) -> 
+         { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)] }
+         Eff IO (SocketOperationRes ())
+forkAccept prog = (ForkAccept prog)
 
 closeBound : { [TCPSERVER (ServerBound)] ==> [TCPSERVER ()] } Eff IO ()
 closeBound = CloseBound
@@ -252,6 +259,18 @@ instance Handler TCPServer IO where
          Right (client_sock, addr) => do
            res <- run [(CC client_sock addr)] prog
            k (OperationSuccess res) (SL sock)  
+
+  handle (SL sock) (ForkAccept prog) k = do
+    accept_res <- accept sock
+    case accept_res of
+         Left err => do
+           if err == EAGAIN then 
+             k (RecoverableError err) (SL sock)
+           else 
+             k (FatalError err) (SE sock) 
+         Right (client_sock, addr) => do
+           fork (run [(CC client_sock addr)] prog $> return ())
+           k (OperationSuccess ()) (SL sock)  
 
   handle (SB sock) (CloseBound) k = 
     close sock $> k () ()

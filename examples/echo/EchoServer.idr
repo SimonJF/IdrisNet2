@@ -21,8 +21,19 @@ receive = do
     FatalError _ => finaliseClient
     ConnectionClosed => return ()
 
+forkServerLoop : { [TCPSERVER (ServerListening)] ==>
+               [TCPSERVER ()] } Eff IO ()
+forkServerLoop = do
+  -- Accept, and perform the "receive" program with the new socket.
+  accept_res <- forkAccept receive
+  case accept_res of
+       OperationSuccess _ => forkServerLoop
+       RecoverableError _ => forkServerLoop
+       FatalError _ => finaliseServer
+       ConnectionClosed => return ()
+
 serverLoop : { [TCPSERVER (ServerListening)] ==>
-               [TCPSERVER ()] } EffM IO ()
+               [TCPSERVER ()] } Eff IO ()
 serverLoop = do
   -- Accept, and perform the "receive" program with the new socket.
   accept_res <- accept receive
@@ -32,16 +43,16 @@ serverLoop = do
        FatalError _ => finaliseServer
        ConnectionClosed => return ()
 
-setupServer : SocketAddress -> Port -> 
+setupServer : SocketAddress -> Port -> Bool ->
               { [TCPSERVER ()] ==>
-                [TCPSERVER ()] } EffM IO ()
-setupServer sa port = do 
+                [TCPSERVER ()] } Eff IO ()
+setupServer sa port do_fork = do 
   bind_res <- bind sa port
   case bind_res of
     OperationSuccess _ => do
       listen_res <- listen
       case listen_res of
-           OperationSuccess _ => serverLoop
+           OperationSuccess _ => if do_fork then forkServerLoop else serverLoop
            RecoverableError _ => closeBound
            FatalError _ => finaliseServer
            ConnectionClosed => return ()
@@ -51,4 +62,4 @@ setupServer sa port = do
 
 
 main : IO ()
-main = run [()] (setupServer (IPv4Addr 127 0 0 1) 1234) 
+main = run [()] (setupServer (IPv4Addr 127 0 0 1) 1234 True) 

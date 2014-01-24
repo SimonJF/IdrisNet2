@@ -4,7 +4,7 @@ import Network.TCP.TCPClient
 import Effect.StdIO
 
 mutual
-  recvAndPrint : ByteLength -> { [TCPCLIENT (ClientConnected), STDIO] ==> [TCPCLIENT (), STDIO]} EffM IO ()
+  recvAndPrint : ByteLength -> { [TCPCLIENT (ClientConnected), STDIO] ==> [TCPCLIENT (), STDIO]} Eff IO ()
   recvAndPrint len = do 
     recv_res <- tcpRecv len
     case recv_res of
@@ -15,7 +15,7 @@ mutual
       ConnectionClosed   => return ()
 
 
-  getAndSend : { [TCPCLIENT (ClientConnected), STDIO] ==> [TCPCLIENT (), STDIO]} EffM IO ()
+  getAndSend : { [TCPCLIENT (ClientConnected), STDIO] ==> [TCPCLIENT (), STDIO]} Eff IO ()
   getAndSend = do
     input <- getStr
     if (input == "bye!\n") then 
@@ -30,7 +30,7 @@ mutual
                                     return ()
            ConnectionClosed => return ())
 
-echoClient : SocketAddress -> Port -> { [TCPCLIENT (), STDIO] ==> [TCPCLIENT (), STDIO]} EffM IO ()
+echoClient : SocketAddress -> Port -> { [TCPCLIENT (), STDIO] ==> [TCPCLIENT (), STDIO]} Eff IO ()
 echoClient sa port = do
   connect_res <- tcpConnect sa port
   case connect_res of 
