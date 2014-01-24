@@ -9,13 +9,16 @@ import Language.Reflection
 -- Propositions about data
 data Proposition : Type where
   P_LT : Nat -> Nat -> Proposition
-  P_EQ : Nat -> Nat -> Proposition
+  P_EQ : DecEq a => a -> a -> Proposition
   P_BOOL : Bool -> Proposition
   P_AND : Proposition -> Proposition -> Proposition
   P_OR : Proposition -> Proposition -> Proposition
 
 Length : Type
 Length = Int
+
+Reference : Type
+Reference = Int
 
 -- grrrrr, hackity hack
 natToInt : Nat -> Int
@@ -72,7 +75,18 @@ data Chunk : Type where
   --LString : ((length s) ** (s : String)) -> Chunk
   -- Proposition about data
   Prop : (P : Proposition) -> Chunk
-
+  -- Custom chunk of binary data.
+  -- Can be used to make cleverer things without having
+  -- to add to the core PL each time.
+{-
+  Custom : (ty : Type) ->
+           -- ^ Concrete type of the data
+           (marshal_fn : ty -> IO Length) ->
+           -- ^ Function to marshal the data
+           (parse_fn : IO (Maybe (ty, Length))) -> 
+           -- ^ Function to parse the data
+           Chunk
+           -}
 infixl 5 //
 --infixl 5 ##
 
@@ -113,6 +127,16 @@ mutual
     LIST : PacketLang -> PacketLang
     LISTN : (n : Nat) -> PacketLang -> PacketLang
     (>>=) : (p : PacketLang) -> (mkTy p -> PacketLang) -> PacketLang
+    REFERENCE : (w : Int) -> 
+                (pl : PacketLang) -> 
+                PacketLang 
+    -- ^ Backreference to another point within the packet.
+    -- w: Assuming an integer encoding of the reference, how many bits are used?
+    -- pl: PacketLang format of the thing being *referred* to. What should
+    --     the backreference be parsed as?
+    -- 
+    -- TODO: One discussed idea was to keep this in a parser state, instead
+    --       of re-reading things.
 
   -- Packet language decoding
   mkTy : PacketLang -> Type
@@ -121,6 +145,7 @@ mutual
   mkTy (l // r) = Either (mkTy l) (mkTy r)
   mkTy (LIST x) = List (mkTy x)
   mkTy (LISTN n a) = Vect n (mkTy a)
+  mkTy (REFERENCE w pl) = mkTy pl
   mkTy (c >>= k) = (x ** mkTy (k x))
 
 
@@ -151,6 +176,7 @@ bitLength (IF False _ no) x = bitLength no x
 bitLength (y // z) x = either x (\l_x => bitLength y l_x) (\r_x => bitLength z r_x)
 bitLength (LIST pl) x = listLength pl x
 bitLength (LISTN n pl) x = vectLength pl x
+bitLength (REFERENCE w _) _ = w -- Length of the *reference*, not decoded lang
 bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 
@@ -173,3 +199,9 @@ syntax p_if [p] then [t] else [e] = (IF p t e)
 syntax p_either [c1] [c2] = (c1 // c2)
 syntax [x] "##" [y] = (x ** y)
 syntax bool = (CHUNK (CBool))
+syntax prop [p] = (CHUNK (Prop p))
+syntax prop_bool [p] = (P_BOOL p)
+syntax prop_or [p1] [p2] = (P_OR p1 p2)
+syntax prop_and [p1] [p2] = (P_AND p1 p2)
+syntax prop_eq [p1] [p2] = (P_EQ p1 p2)
+

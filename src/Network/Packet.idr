@@ -183,6 +183,25 @@ unmarshalBool (ActivePacketRes pckt pos p_len) with ((pos + 1) <= p_len)
       return (Just (res == 1, 1))
   | False = return Nothing
 
+unmarshalProp : (p : Proposition) -> Maybe (propTy p)
+unmarshalProp (P_EQ x y) = 
+  case decEq x y of
+    (Yes p) => Just p
+    (No p) => Nothing
+unmarshalProp (P_BOOL b) =
+  case choose b of
+    Left p_yes => Just p_yes -- That's just SO b
+    Right _ => Nothing -- That's just SO not b
+unmarshalProp (P_AND prop1 prop2) = do
+  p1 <- unmarshalProp prop1
+  p2 <- unmarshalProp prop2
+  Just (MkBoth prop1 prop2 p1 p2)
+unmarshalProp (P_OR p1 p2) = 
+  maybe (maybe (Nothing) (\p2' => Just (Right p2')) (unmarshalProp p2))
+                         (\p1' => Just (Left p1')) (unmarshalProp p1)
+unmarshalProp (P_LT x y) = Nothing -- TODO
+
+
 unmarshalChunk : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
 unmarshalChunk ap (Bit width p) = unmarshalBits ap (Bit width p) 
 unmarshalChunk ap CBool = unmarshalBool ap 
@@ -194,16 +213,15 @@ unmarshalChunk (ActivePacketRes pckt pos p_len) (LString n) =
     return $ Just (res, (8 * n))
   else
     return Nothing
-unmarshalChunk x (Prop P) = return Nothing 
--- TODO: There is an ambiguity problem here.
--- Consider the case where we have a packet description of LIST String, String, String, Int.
--- The packet decoding would fail: we'd include the two strings as part of the list.
--- This is a tricky one to resolve, since we're doing stream parsing as opposed to having
--- the entire list of tokens available to us. 
--- Needs some extra thought, and is a big problem. But it's not covered in the original IP DSL, 
---so we're OK just for now, I think.
+unmarshalChunk _ (Prop p) = 
+  case unmarshalProp p of
+       Just p' => return $ Just (p', 0)
+       Nothing => return Nothing
+ 
 
---T  
+-- There's an ambiguity problem here, but it's not massively problematic
+-- according to Edwin (in reality, RFCs will define markers at the end of
+-- lists). It might be worth taking a little more of a look later though...
 unmarshalList : ActivePacket -> (pl : PacketLang) -> (List (mkTy pl), Length)
 unmarshalList (ActivePacketRes pckt pos p_len) pl =
     case (unmarshal' (ActivePacketRes pckt pos p_len) pl) of
@@ -212,6 +230,7 @@ unmarshalList (ActivePacketRes pckt pos p_len) pl =
         let (rest, rest_len) = (fst xs_tup, snd xs_tup) in
             (item :: rest, len + rest_len)
       Nothing => ([], 0) -- Finished parsing list
+
 
 
 unmarshalVect : ActivePacket -> 

@@ -9,8 +9,11 @@ simpleStruct = do
   lstring 5
   p_either (bits 8) (lstring 4)
   listn 3 cstring
-  bool
-  bool
+  b1 <- bool
+  b2 <- bool
+  prop (prop_or (prop_bool b2) (prop_bool b1))
+  -- CHUNK (Prop (P_OR (P_BOOL b2) (P_BOOL b1)))
+  -- CHUNK (Prop (P_OR (P_BOOL b2) (P_BOOL b1)))
 
 myBoundedInt : Bounded 8
 myBoundedInt = BInt 5 oh
@@ -21,7 +24,8 @@ simpleStructInstance = ("hello" ##
                         (Left myBoundedInt) ## 
                         ["hello", "you", "dears"] ##
                         True ##
-                        False)
+                        False ##
+                        (Right oh))
 
 simpleResponse : PacketLang
 simpleResponse = do

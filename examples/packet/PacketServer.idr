@@ -11,14 +11,14 @@ import Network.TCP.TCPServer
 import PacketStruct
 
 printSimpleStruct : (mkTy simpleStruct) -> { [STDIO] } Eff IO ()
-printSimpleStruct (s1 ## s2 ## (Left b_int) ## xs ## b1 ## b2) = do
+printSimpleStruct (s1 ## s2 ## (Left b_int) ## xs ## b1 ## b2 ## prf) = do
   putStr $ "S1: " ++ s1 ++ "\n"
   putStr $ "S2: " ++ s2 ++ "\n"
   putStr $ "b_int: " ++ (show b_int) ++ "\n"
   putStr $ "xs: " ++ (show xs) ++ "\n"
   putStr $ "b1: " ++ (show b1) ++ "\n"
   putStr $ "b2: " ++ (show b2) ++ "\n"
-printSimpleStruct (s1 ## s2 ## (Right s3) ## xs ## b1 ## b2) = do
+printSimpleStruct (s1 ## s2 ## (Right s3) ## xs ## b1 ## b2 ## prf) = do
   putStr $ "S1: " ++ s1 ++ "\n"
   putStr $ "S2: " ++ s2 ++ "\n"
   putStr $ "S3: " ++ s2 ++ "\n"
