@@ -55,7 +55,7 @@ interpBindRes _ = ()
 
 {- This is an effect that deals with an accepted client. We're allowed to 
    read from, write to, and close this socket. 
-   An effectual program of type TCPSERVERCLIENT will be run, initially in the
+   An effectual program of type TCPSERVERCLIENT will be runInit, initially in the
    ClientConnected state, upon acceptance of a client. This will be given in the
    form of an argument to Accept. The effectual program must end by closing the socket. -}
 data TCPServerClient : Effect where
@@ -257,7 +257,7 @@ instance Handler TCPServer IO where
            else 
              k (FatalError err) (SE sock) 
          Right (client_sock, addr) => do
-           res <- run [(CC client_sock addr)] prog
+           res <- runInit [(CC client_sock addr)] prog
            k (OperationSuccess res) (SL sock)  
 
   handle (SL sock) (ForkAccept prog) k = do
@@ -269,7 +269,7 @@ instance Handler TCPServer IO where
            else 
              k (FatalError err) (SE sock) 
          Right (client_sock, addr) => do
-           fork (run [(CC client_sock addr)] prog $> return ())
+           fork (runInit [(CC client_sock addr)] prog $> return ())
            k (OperationSuccess ()) (SL sock)  
 
   handle (SB sock) (CloseBound) k = 

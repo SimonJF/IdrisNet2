@@ -43,4 +43,4 @@ echoClient sa port = do
                           return ()
 
 main : IO ()
-main = run [(), ()] (echoClient (IPv4Addr 127 0 0 1) 1234)
+main = runInit [(), ()] (echoClient (IPv4Addr 127 0 0 1) 1234)

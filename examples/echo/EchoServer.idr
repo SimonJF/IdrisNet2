@@ -62,4 +62,4 @@ setupServer sa port do_fork = do
 
 
 main : IO ()
-main = run [()] (setupServer (IPv4Addr 127 0 0 1) 1234 True) 
+main = runInit [()] (setupServer (IPv4Addr 127 0 0 1) 1234 True) 

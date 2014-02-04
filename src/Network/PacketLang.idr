@@ -17,9 +17,6 @@ data Proposition : Type where
 Length : Type
 Length = Int
 
-Reference : Type
-Reference = Int
-
 -- grrrrr, hackity hack
 natToInt : Nat -> Int
 natToInt Z = 0
@@ -127,17 +124,7 @@ mutual
     LIST : PacketLang -> PacketLang
     LISTN : (n : Nat) -> PacketLang -> PacketLang
     (>>=) : (p : PacketLang) -> (mkTy p -> PacketLang) -> PacketLang
-    REFERENCE : (w : Int) -> 
-                (pl : PacketLang) -> 
-                PacketLang 
-    -- ^ Backreference to another point within the packet.
-    -- w: Assuming an integer encoding of the reference, how many bits are used?
-    -- pl: PacketLang format of the thing being *referred* to. What should
-    --     the backreference be parsed as?
-    -- 
-    -- TODO: One discussed idea was to keep this in a parser state, instead
-    --       of re-reading things.
-
+    
   -- Packet language decoding
   mkTy : PacketLang -> Type
   mkTy (CHUNK c) = chunkTy c
@@ -145,7 +132,6 @@ mutual
   mkTy (l // r) = Either (mkTy l) (mkTy r)
   mkTy (LIST x) = List (mkTy x)
   mkTy (LISTN n a) = Vect n (mkTy a)
-  mkTy (REFERENCE w pl) = mkTy pl
   mkTy (c >>= k) = (x ** mkTy (k x))
 
 
@@ -176,7 +162,6 @@ bitLength (IF False _ no) x = bitLength no x
 bitLength (y // z) x = either x (\l_x => bitLength y l_x) (\r_x => bitLength z r_x)
 bitLength (LIST pl) x = listLength pl x
 bitLength (LISTN n pl) x = vectLength pl x
-bitLength (REFERENCE w _) _ = w -- Length of the *reference*, not decoded lang
 bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 
