@@ -164,6 +164,10 @@ bitLength (LIST pl) x = listLength pl x
 bitLength (LISTN n pl) x = vectLength pl x
 bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
+-- FIXME: Shift this to Network.PacketLang
+value : Bounded n -> Int
+value (BInt i p) = i
+
 
 -- Syntax rules, so it's nicer to write these things...
 bit : (w : Int) -> {default tactics { refine oh; solve;} 
