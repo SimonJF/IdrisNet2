@@ -89,8 +89,8 @@ marshal' : ActivePacket -> (pl : PacketLang) -> mkTy pl -> IO Length
 marshal' ap (CHUNK c) c_dat = marshalChunk ap c c_dat
 marshal' ap (IF True pl_t _) ite = marshal' ap pl_t ite
 marshal' ap (IF False _ pl_f) ite = marshal' ap pl_f ite
-marshal' ap (pl_1 // pl_2) x = either x (\x_l => marshal' ap pl_1 x_l)
-                                       (\x_r => marshal' ap pl_2 x_r) 
+marshal' ap (pl_1 // pl_2) x = either (\x_l => marshal' ap pl_1 x_l)
+                                      (\x_r => marshal' ap pl_2 x_r) x
 marshal' ap (LIST pl) xs = marshalList ap pl xs
 marshal' ap (LISTN n pl) xs = marshalVect ap pl xs
 marshal' ap (c >>= k) (x ** y) = do

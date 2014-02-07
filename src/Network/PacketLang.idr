@@ -159,7 +159,7 @@ vectLength pl (x :: xs) = bitLength pl x + (vectLength pl xs)
 bitLength (CHUNK c) x = chunkLength c x
 bitLength (IF True yes _) x = bitLength yes x
 bitLength (IF False _ no) x = bitLength no x
-bitLength (y // z) x = either x (\l_x => bitLength y l_x) (\r_x => bitLength z r_x)
+bitLength (y // z) x = either (\l_x => bitLength y l_x) (\r_x => bitLength z r_x) x
 bitLength (LIST pl) x = listLength pl x
 bitLength (LISTN n pl) x = vectLength pl x
 bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b

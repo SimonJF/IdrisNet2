@@ -125,14 +125,14 @@ instance Handler TCPClient IO where
 
   handle (CC sock) (ReadString byte_len) k = do
     recv_res <- recv sock byte_len
-    either recv_res (\err => if (err == EAGAIN) then 
+    either (\err => if (err == EAGAIN) then 
                                k (RecoverableError err) (CC sock)
                              else 
                                if (err == 0) then -- socket closed
                                  k (ConnectionClosed) ()
                                else
                                  k (FatalError err) (ES sock))
-                    (\res => k (OperationSuccess res) (CC sock))
+           (\res => k (OperationSuccess res) (CC sock)) recv_res
 
   handle (CC sock) (WritePacket pl dat) k = do
     (pckt, len) <- marshal pl dat

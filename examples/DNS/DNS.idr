@@ -133,10 +133,53 @@ data DNSRecord : Type where
                 (dnsRRPayload : Int) -> -- FIXME Temp, haven't decided how to do this yet
                 DNSRecord
 
+{-
+dnsHeader : PacketLang
+dnsHeader = do ident <- bits 16 -- Request identifier
+               qr <- bool -- Query or response 
+               opcode <- bits 4 -- Which type of query? Only 0, 1 and 2 valid
+               aa <- bool -- Only set in response, is responding server authority?
+               tc <- bool -- Was message truncated?
+               rd <- bool -- Recursion desired, set in query, copied into response
+               ra <- bool -- Recursion available; is support available in NS?
+               z  <- bool -- Must be 0.
+               bits 4 -- Response code, only 0-5 valid
+-}
+
+data DNSResponse = DNSNoError
+                 | DNSFormatError
+                 | DNSServerError
+                 | DNSNameError
+                 | DNSNotImplementedError
+                 | DNSRefusedError
+                 
+
+dnsResponseToCode : DNSResponse -> Int
+dnsResponseToCode DNSNoError = 0
+dnsResponseToCode DNSFormatError = 1
+dnsResponseToCode DNSServerError = 2 
+dnsResponseToCode DNSNameError = 3 
+dnsResponseToCode DNSNotImplementedError = 4 
+dnsResponseToCode DNSRefusedError = 5
+
+codeFromDNSResponse : Int -> Maybe DNSResponse
+codeFromDNSResponse i = 
+  lookup i [(0, DNSNoError), (1, DNSFormatError), (2, DNSServerError), 
+            (3, DNSNameError), (4, DNSNotImplementedError), (5, DNSRefusedError)]
+
+instance Code DNSResponse where
+  toCode = dnsResponseToCode
+  fromCode = codeFromDNSResponse
 
 data DNSHeader : Type where
-  MkDNSHeader : DNSHeader
-
+  MkDNSHeader : (dnsHdrId : Int) ->
+                (dnsHdrIsQuery : Bool) ->
+                (dnsHdrIsAuthority : Bool) ->
+                (dnsHdrIsTruncated : Bool) ->
+                (dnsHdrRecursionDesired : Bool) ->
+                (dnsHdrRecursionAvailable : Bool) ->
+                (dnsHdrResponse : DNSResponse) ->
+                DNSHeader
 
 record DNSPacket : Type where
   MkDNS : (dnsPcktHeader : DNSHeader) -> 
