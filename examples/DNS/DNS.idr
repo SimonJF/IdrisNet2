@@ -133,19 +133,6 @@ data DNSRecord : Type where
                 (dnsRRPayload : Int) -> -- FIXME Temp, haven't decided how to do this yet
                 DNSRecord
 
-{-
-dnsHeader : PacketLang
-dnsHeader = do ident <- bits 16 -- Request identifier
-               qr <- bool -- Query or response 
-               opcode <- bits 4 -- Which type of query? Only 0, 1 and 2 valid
-               aa <- bool -- Only set in response, is responding server authority?
-               tc <- bool -- Was message truncated?
-               rd <- bool -- Recursion desired, set in query, copied into response
-               ra <- bool -- Recursion available; is support available in NS?
-               z  <- bool -- Must be 0.
-               bits 4 -- Response code, only 0-5 valid
--}
-
 data DNSResponse = DNSNoError
                  | DNSFormatError
                  | DNSServerError
@@ -164,8 +151,8 @@ dnsResponseToCode DNSRefusedError = 5
 
 codeFromDNSResponse : Int -> Maybe DNSResponse
 codeFromDNSResponse i = 
-  lookup i [(0, DNSNoError), (1, DNSFormatError), (2, DNSServerError), 
-            (3, DNSNameError), (4, DNSNotImplementedError), (5, DNSRefusedError)]
+  lookup i (the (List _ ) [(0, DNSNoError), (1, DNSFormatError), (2, DNSServerError), 
+            (3, DNSNameError), (4, DNSNotImplementedError), (5, DNSRefusedError)])
 
 instance Code DNSResponse where
   toCode = dnsResponseToCode
@@ -254,6 +241,19 @@ dnsHeader = do ident <- bits 16 -- Request identifier
 
 -- DNS Resource Record
 -- The same for answers, authorities and additional info.
+
+{-
+RDLENGTH        an unsigned 16 bit integer that specifies the length in
+                octets of the RDATA field.
+
+RDATA           a variable length string of octets that describes the
+                resource.  The format of this information varies
+                according to the TYPE and CLASS of the resource record.
+                For example, the if the TYPE is A and the CLASS is IN,
+                the RDATA field is a 4 octet ARPA Internet address.
+-}
+
+
 dnsRR : PacketLang
 dnsRR = do domain <- list (dnsReference // dnsLabel)
            nullterm 
@@ -263,7 +263,11 @@ dnsRR = do domain <- list (dnsReference // dnsLabel)
            check (validCLASS (value cls))
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
-           bits 32 -- FIXME: Temp
+           let vl = ((value len) * 8)
+           prf <- check (vl > 0)
+           bounded_bits vl prf
+
+--bits 32 -- FIXME: Temp
             -- 32 -- FIXME: Temp. Need proper verification here...
            --let vl = value len
            --prf <- check (vl > 0)

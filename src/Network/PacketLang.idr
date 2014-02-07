@@ -193,4 +193,4 @@ syntax prop_bool [p] = (CHUNK (Prop (P_BOOL p)))
 syntax prop_or [p1] [p2] = (CHUNK (Prop (P_OR p1 p2)))
 syntax prop_and [p1] [p2] = (CHUNK (Prop (P_AND p1 p2)))
 syntax prop_eq [p1] [p2] = (CHUNK (Prop (P_EQ p1 p2)))
-
+syntax bounded_bits [len] [prf] = (CHUNK (Bit len prf))
