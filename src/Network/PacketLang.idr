@@ -22,6 +22,9 @@ natToInt : Nat -> Int
 natToInt Z = 0
 natToInt (S k) = 1 + (natToInt k)
 
+-- FIXME: This is a horrible, horrible, horrible, horrible falsehood.
+-- But for now, it'll do.
+%assert_total
 intToNat : Int -> Nat
 intToNat 0 = Z
 intToNat i = S (intToNat (i - 1))
@@ -163,10 +166,6 @@ bitLength (y // z) x = either (\l_x => bitLength y l_x) (\r_x => bitLength z r_x
 bitLength (LIST pl) x = listLength pl x
 bitLength (LISTN n pl) x = vectLength pl x
 bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
-
--- FIXME: Shift this to Network.PacketLang
-value : Bounded n -> Int
-value (BInt i p) = i
 
 
 -- Syntax rules, so it's nicer to write these things...

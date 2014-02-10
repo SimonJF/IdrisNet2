@@ -21,6 +21,21 @@ class Code a where
   toCode : a -> Int
   fromCode : Int -> Maybe a
 
+
+data DNSHdrOpcode = QUERY | IQUERY | STATUS
+
+dnsOpcodeToCode : DNSHdrOpcode -> Int
+dnsOpcodeToCode QUERY = 0
+dnsOpcodeToCode IQUERY = 1
+dnsOpcodeToCode STATUS = 2
+
+codeToDNSOpcode : Int -> Maybe DNSHdrOpcode
+codeToDNSOpcode i = lookup i (the (List _) [(0, QUERY), (1, IQUERY), (2, STATUS)])
+
+instance Code DNSHdrOpcode where
+  toCode x = dnsOpcodeToCode x
+  fromCode i = codeToDNSOpcode i
+
 data DNSClass = IN -- Internet
               | CS  -- CSNET
               | CH -- CHAOS
@@ -109,9 +124,9 @@ dnsQTypeToCode (DNSBaseTy ty) = dnsTypeToCode ty
 
 codeToDNSQType : Int -> Maybe DNSQType
 codeToDNSQType 252 = Just AXFR
-codeToDNSQType 252 = Just MAILB
-codeToDNSQType 252 = Just MAILA
-codeToDNSQType 252 = Just ALL
+codeToDNSQType 253 = Just MAILB
+codeToDNSQType 254 = Just MAILA
+codeToDNSQType 255 = Just ALL
 codeToDNSQType i = map DNSBaseTy (codeToDNSType i)
 
 instance Code DNSType where
@@ -123,7 +138,10 @@ instance Code DNSQType where
   fromCode i = codeToDNSQType i
 
 data DNSQuestion : Type where
-  MkDNSQuestion : DNSQuestion
+  MkDNSQuestion : (dnsQNames : List DomainFragment) ->
+                  (dnsQQType : DNSQType) ->
+                  (dnsQQClass : DNSQClass) ->
+                  DNSQuestion
 
 data DNSRecord : Type where
   MkDNSRecord : (dnsRRName : List DomainFragment) ->
@@ -158,9 +176,10 @@ instance Code DNSResponse where
   toCode = dnsResponseToCode
   fromCode = codeFromDNSResponse
 
-data DNSHeader : Type where
+record DNSHeader : Type where
   MkDNSHeader : (dnsHdrId : Int) ->
                 (dnsHdrIsQuery : Bool) ->
+                (dnsHdrOpcode : DNSHdrOpcode) ->
                 (dnsHdrIsAuthority : Bool) ->
                 (dnsHdrIsTruncated : Bool) ->
                 (dnsHdrRecursionDesired : Bool) ->
@@ -174,12 +193,18 @@ record DNSPacket : Type where
           (dnsPcktANCount : Nat) ->
           (dnsPcktNSCount : Nat) ->
           (dnsPcktARCount : Nat) ->
+          (dnsPcktQuestions : List DNSQuestion) ->
+          (dnsPcktAnswers : List DNSRecord) ->
+          (dnsPcktAdditionals : List DNSRecord) ->
+          DNSPacket
+{-
+          TODO: These would be nice...
           (dnsPcktQuestions : Vect dnsPcktQDCount DNSQuestion) ->
           (dnsPcktAnswers : Vect dnsPcktANCount DNSRecord) ->
           (dnsPcktAuthorities : Vect dnsPcktNSCount DNSRecord) ->
           (dnsPcktAdditionals : Vect dnsPcktNSCount DNSRecord) ->
           DNSPacket
-
+-}
 -- Verified implementation of the DNS packet specification
 
 -- Validation of TYPE and QTYPE fields
@@ -196,85 +221,85 @@ validCLASS i = i >= 1 || i <= 4 -- In practice, this will only be 1..
 validQCLASS : Int -> Bool
 validQCLASS i = (validCLASS i) || i == 255
 
+validOpcode : Int -> Bool
+validOpcode i = i == 0 || i == 1 || i == 2
+
+abstract
 nullterm : PacketLang
 nullterm = do nt <- bits 8
-              check ((value nt) == 0)
+              check ((val nt) == 0)
+
+validRespCode : Int -> Bool
+validRespCode i = i >= 0 && i <= 5
 
 -- DNS allows compression in the form of references.
 -- These take the form of two octets, the first two bits of which 
 -- are 11. The rest is 14 bits.
+abstract -- This is junk, we don't really want it to reduce
+tagCheck : Int -> PacketLang
+tagCheck i = do tag1 <- bits 1
+                tag2 <- bits 1
+                let v1 = val tag1
+                let v2 = val tag2
+                prop_eq v1 i
+                prop_eq v2 i
+
 dnsReference : PacketLang
-dnsReference = do tag1 <- bits 1
-                  tag2 <- bits 1
-                  let v1 = value tag1
-                  let v2 = value tag2
-                  prop_eq v1 1
-                  prop_eq v2 1
+dnsReference = do tagCheck 1
                   bits 14
 
- --                 check (((value tag1) == 1) && ((value tag2) == 1))
-
+ --                 check (((val tag1) == 1) && ((val tag2) == 1))
 
 dnsLabel : PacketLang
-dnsLabel = do len <- bits 8
-              check ((value len) /= 0) 
-              listn (intToNat $ value len) (bits 8)
+dnsLabel = do tagCheck 0
+              len <- bits 6
+              let vl = (val len)
+              prf <- check (vl /= 0) 
+              listn (intToNat vl) (bits 8)
+
+
+dnsLabels : PacketLang
+dnsLabels = do list dnsLabel
+               nullterm // dnsReference
+
+dnsDomain : PacketLang
+dnsDomain = dnsReference // dnsLabels
 
 dnsQuestion : PacketLang
-dnsQuestion = do list (dnsReference // dnsLabel)
-                 nullterm -- Zero-length octet for the root domain
+dnsQuestion = do dnsDomain
                  qtype <- bits 16
-                 check (validQTYPE (value qtype))
+                 check (validQTYPE (val qtype))
                  qclass <- bits 16 
                  check (validQCLASS 16)
 
+-- abstract
 dnsHeader : PacketLang
 dnsHeader = do ident <- bits 16 -- Request identifier
                qr <- bool -- Query or response 
                opcode <- bits 4 -- Which type of query? Only 0, 1 and 2 valid
+               check (validOpcode (val opcode))
                aa <- bool -- Only set in response, is responding server authority?
                tc <- bool -- Was message truncated?
                rd <- bool -- Recursion desired, set in query, copied into response
                ra <- bool -- Recursion available; is support available in NS?
                z  <- bool -- Must be 0.
-               bits 4 -- Response code, only 0-5 valid
+               check (not z)
+               resp <- bits 4 -- Response code, only 0-5 valid
+               check (validRespCode (val resp))
 
 -- DNS Resource Record
 -- The same for answers, authorities and additional info.
-
-{-
-RDLENGTH        an unsigned 16 bit integer that specifies the length in
-                octets of the RDATA field.
-
-RDATA           a variable length string of octets that describes the
-                resource.  The format of this information varies
-                according to the TYPE and CLASS of the resource record.
-                For example, the if the TYPE is A and the CLASS is IN,
-                the RDATA field is a 4 octet ARPA Internet address.
--}
-
-
 dnsRR : PacketLang
-dnsRR = do domain <- list (dnsReference // dnsLabel)
-           nullterm 
+dnsRR = do domain <- dnsDomain
            ty <- bits 16
-           check (validTYPE (value ty))
+           check (validTYPE (val ty))
            cls <- bits 16
-           check (validCLASS (value cls))
+           check (validCLASS (val cls))
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
-           let vl = ((value len) * 8)
+           let vl = ((val len) * 8)
            prf <- check (vl > 0)
            bounded_bits vl prf
-
---bits 32 -- FIXME: Temp
-            -- 32 -- FIXME: Temp. Need proper verification here...
-           --let vl = value len
-           --prf <- check (vl > 0)
-           --CHUNK (Bit vl prf)
-           --bits ((value len) * 8) prf -- Data payload. This is a tad more complex, TODO: more verification
-                             -- although RFC is pretty unspecific on this, 
-                             -- and it's generally just 4-byte IP
 
 dns : PacketLang
 dns = do header <- dnsHeader
@@ -284,9 +309,9 @@ dns = do header <- dnsHeader
          ancount <- bits 16 -- Number of entries in the answer section
          nscount <- bits 16 -- Number of NS resource records in auth records
          arcount <- bits 16 -- Number of resource records in additional records section
-         question <- dnsQuestion 
-         answer <- dnsRR
-         authority <- dnsRR
-         dnsRR -- Additional
+         questions <- listn (intToNat $ val qdcount) dnsQuestion 
+         answers <- listn (intToNat $ val ancount) dnsRR
+         authorities <- listn (intToNat $ val nscount) dnsRR
+         listn (intToNat $ val arcount) dnsRR -- Additional
 
 

@@ -8,8 +8,6 @@ import Effects
 %include C "bindata.h"
 %link C "bindata.o"
 
-%access private
-
 -- Type synonyms for different arguments to foreign functions
 public
 BytePos : Type
@@ -118,6 +116,7 @@ marshalList (ActivePacketRes pckt pos p_len) pl (x::xs) = do
 
 
 {- Unmarshalling Code -}
+public
 unmarshal' : ActivePacket -> (pl : PacketLang) -> Maybe (mkTy pl, Length)
 
 
