@@ -193,18 +193,11 @@ record DNSPacket : Type where
           (dnsPcktANCount : Nat) ->
           (dnsPcktNSCount : Nat) ->
           (dnsPcktARCount : Nat) ->
-          (dnsPcktQuestions : List DNSQuestion) ->
-          (dnsPcktAnswers : List DNSRecord) ->
-          (dnsPcktAdditionals : List DNSRecord) ->
-          DNSPacket
-{-
-          TODO: These would be nice...
           (dnsPcktQuestions : Vect dnsPcktQDCount DNSQuestion) ->
           (dnsPcktAnswers : Vect dnsPcktANCount DNSRecord) ->
           (dnsPcktAuthorities : Vect dnsPcktNSCount DNSRecord) ->
           (dnsPcktAdditionals : Vect dnsPcktNSCount DNSRecord) ->
           DNSPacket
--}
 -- Verified implementation of the DNS packet specification
 
 -- Validation of TYPE and QTYPE fields

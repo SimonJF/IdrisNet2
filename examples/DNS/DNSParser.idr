@@ -9,7 +9,7 @@ DNSReference : Type
 DNSReference = Int
 
 data DNSParseError = NonexistentRef Int -- Bad reference
-                   | BadCode Int -- Error decoding something from an int to a datatype
+                   | BadCode -- Error decoding something from an int to a datatype
 
 record DNSState : Type where
   MkDNSState : (blob : RawPacket) ->
@@ -105,16 +105,67 @@ decodeDomain (Right encoded_lbls) = decodeLabels encoded_lbls
 parseDNSQuestion : (mkTy dnsQuestion) -> { [DNSPARSER DNSState] } Eff m (Maybe DNSQuestion)
 parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = do
   decoded_domain <- decodeDomain encoded_domain
-  ?mv_parseq
+  case (decoded_domain, codeToDNSQType (val qt), codeToDNSQClass (val qc)) of
+    (Right domain', Just qt', Just qc') => return $ Just (MkDNSQuestion domain' qt' qc')
+    _ => return Nothing
 
-parseDNSPacket : (mkTy dns) ->  
+
+parseDNSRecord : (mkTy dnsRR) ->
+                 { [DNSPARSER DNSState] } 
+                   Eff m (Either DNSParseError DNSPacket)
+parseDNSRecord = ?mv
+--parseDNSRecord (encoded_domain ## ty ##  = ?mv
+
+
+lemma_vect_len : (n : Nat) -> (v : Vect m a) -> Maybe (Vect n a)
+lemma_vect_len Z [] = Just []
+lemma_vect_len (S k) [] = Nothing
+lemma_vect_len Z xs = Nothing
+lemma_vect_len (S k) (x :: xs) = do
+  xs' <- lemma_vect_len k xs
+  return $ x :: xs' -- applicative... (Just x) :: (lemma_vect_len k xs) 
+
+
+parseDNSPacket : Applicative m =>
+                 (mkTy dns) ->  
                  { [DNSPARSER DNSState] } 
                    Eff m (Either DNSParseError DNSPacket)
 parseDNSPacket (hdr ## qdcount ## ancount ## nscount ## 
                 arcount ## qs ## as ## auths ## additionals) = do
-  let dns_header = parseDNSHeader hdr
-  ?mv_pckt
+  let hdr' = parseDNSHeader hdr
+  qs' <- mapVE parseDNSQuestion qs
+  as' <- mapVE parseDNSRecord as
+  auths' <- mapVE parseDNSRecord auths
+  additionals' <- mapVE parseDNSRecord additionals
+  let records = sequence $ (the (List (Either DNSParseError DNSRecord)) 
+                                 [as', auths', additionals'])
+  ?mv_dnsp
+{-
+  -- Now, see if everything was successful!
+  case (hdr', qs', records) of
+    (Just hdr'', Just qs'', Right [as'', auths'', additionals'']) =>
+      return $ MkDNS hdr (val qdcount) (val ancount) (val nscount)
+                (val arcount) qs'' as'' auths'' additionals''
+    -- Record parsing may throw an error
+    (_, _, Left err) => return $ Left err
+    -- Nothing = bad code
+    _ => return $ Left BadCode
 --parseDNSPacket (hdr ## qdcount ## ancount ## nscount ## arcount ## qs ## as ## auths ## additionals) = ?mv
+-}
+{-
+record DNSPacket : Type where
+  MkDNS : (dnsPcktHeader : DNSHeader) -> 
+          (dnsPcktQDCount : Nat) ->
+          (dnsPcktANCount : Nat) ->
+          (dnsPcktNSCount : Nat) ->
+          (dnsPcktARCount : Nat) ->
+          (dnsPcktQuestions : Vect dnsPcktQDCount DNSQuestion) ->
+          (dnsPcktAnswers : Vect dnsPcktANCount DNSRecord) ->
+          (dnsPcktAuthorities : Vect dnsPcktNSCount DNSRecord) ->
+          (dnsPcktAdditionals : Vect dnsPcktNSCount DNSRecord) ->
+          DNSPacket
+-}
+
 
 encodeDNSPacket : DNSPacket -> { [DNSPARSER DNSState] } Eff m (mkTy dns)
 encodeDNSPacket dnspckt = ?encodeDNSPacket_rhs
