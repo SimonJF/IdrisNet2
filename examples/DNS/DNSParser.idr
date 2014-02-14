@@ -10,6 +10,7 @@ DNSReference = Int
 
 data DNSParseError = NonexistentRef Int -- Bad reference
                    | BadCode -- Error decoding something from an int to a datatype
+                   | InternalError String -- Something else
 
 record DNSState : Type where
   MkDNSState : (blob : RawPacket) ->
@@ -112,7 +113,7 @@ parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = do
 
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
-                   Eff m (Either DNSParseError DNSPacket)
+                   Eff m (Either DNSParseError DNSRecord)
 parseDNSRecord = ?mv
 --parseDNSRecord (encoded_domain ## ty ##  = ?mv
 
@@ -125,6 +126,28 @@ lemma_vect_len (S k) (x :: xs) = do
   xs' <- lemma_vect_len k xs
   return $ x :: xs' -- applicative... (Just x) :: (lemma_vect_len k xs) 
 
+-- Temp, until something makes it into the library
+mapVE : Applicative m => (a -> {xs} Eff m b) -> Vect n a -> {xs} Eff m (Vect n b)
+mapVE f []        = pure []
+mapVE f (x :: xs) = [| f x :: mapVE f xs |]
+
+-- Ugly hack, since records aren't of the same type and therefore we can't 
+-- use sequence. Also proves to the TC that the lengths are as stated.
+sequenceRecords : 
+               (n' : Nat) -> 
+               (m' : Nat) -> 
+               (l' : Nat) ->
+               Vect n (Either DNSParseError DNSRecord) -> 
+               Vect m (Either DNSParseError DNSRecord) -> 
+               Vect l (Either DNSParseError DNSRecord) -> 
+               Either DNSParseError (Vect n' DNSRecord, Vect m' DNSRecord, Vect l' DNSRecord)
+sequenceRecords n m l v1 v2 v3 = do
+  v1' <- sequence v1
+  v2' <- sequence v2
+  v3' <- sequence v3
+  case (lemma_vect_len n v1', lemma_vect_len m v2', lemma_vect_len l v3') of
+      (Just v1'', Just v2'', Just v3'') => Right (v1'', v2'', v3'')
+      _ => Left $ InternalError "Vect length mismatch. This shouldn't happen!"
 
 parseDNSPacket : Applicative m =>
                  (mkTy dns) ->  
@@ -133,25 +156,31 @@ parseDNSPacket : Applicative m =>
 parseDNSPacket (hdr ## qdcount ## ancount ## nscount ## 
                 arcount ## qs ## as ## auths ## additionals) = do
   let hdr' = parseDNSHeader hdr
+  let n_qdcount = intToNat $ val qdcount
+  let n_ancount = intToNat $ val ancount
+  let n_nscount= intToNat $ val nscount
+  let n_arcount = intToNat $ val arcount
   qs' <- mapVE parseDNSQuestion qs
+  -- sequence results in TC not terminating
+  let qs_ = sequence qs'
+  -- let qs'' = map (lemma_vect_len n_qdcount) (sequence qs')
+  ?mv_dnsp {-
   as' <- mapVE parseDNSRecord as
   auths' <- mapVE parseDNSRecord auths
   additionals' <- mapVE parseDNSRecord additionals
-  let records = sequence $ (the (List (Either DNSParseError DNSRecord)) 
-                                 [as', auths', additionals'])
-  ?mv_dnsp
-{-
+  let records = sequenceRecords n_ancount n_nscount n_arcount as' auths' additionals'
   -- Now, see if everything was successful!
-  case (hdr', qs', records) of
-    (Just hdr'', Just qs'', Right [as'', auths'', additionals'']) =>
-      return $ MkDNS hdr (val qdcount) (val ancount) (val nscount)
-                (val arcount) qs'' as'' auths'' additionals''
+  case (hdr', qs'', records) of
+    (Just hdr'', Just qs''', Right (as'', auths'', additionals'')) =>
+      return $ Right (MkDNS hdr n_qdcount n_ancount n_nscount
+                n_arcount qs''' as'' auths'' additionals'')
     -- Record parsing may throw an error
     (_, _, Left err) => return $ Left err
     -- Nothing = bad code
     _ => return $ Left BadCode
+    -}
 --parseDNSPacket (hdr ## qdcount ## ancount ## nscount ## arcount ## qs ## as ## auths ## additionals) = ?mv
--}
+
 {-
 record DNSPacket : Type where
   MkDNS : (dnsPcktHeader : DNSHeader) -> 
