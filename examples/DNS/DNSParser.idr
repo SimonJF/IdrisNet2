@@ -114,7 +114,8 @@ parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = do
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
                    Eff m (Either DNSParseError DNSRecord)
-parseDNSRecord = ?mv
+parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ##
+                len ## len_prf ## payload) = ?mv
 --parseDNSRecord (encoded_domain ## ty ##  = ?mv
 
 
@@ -130,6 +131,24 @@ lemma_vect_len (S k) (x :: xs) = do
 mapVE : Applicative m => (a -> {xs} Eff m b) -> Vect n a -> {xs} Eff m (Vect n b)
 mapVE f []        = pure []
 mapVE f (x :: xs) = [| f x :: mapVE f xs |]
+
+
+-- FIXME: For some reason, sequence isn't working (causing infinite TC loop)
+-- so here's a specialised version...
+sequenceRecord : Vect n (Either DNSParseError DNSRecord) ->
+                 Either DNSParseError (Vect n DNSRecord)
+sequenceRecord [] = Right []
+sequenceRecord ((Left err) :: _) = Left err
+sequenceRecord ((Right rec) :: recs) = sequenceRecord recs >>= (\recs' => Right (rec :: recs'))
+
+sequenceQuestion : Vect n (Maybe DNSQuestion) ->
+                   Maybe (Vect n DNSQuestion)
+sequenceQuestion [] = Just []
+sequenceQuestion (Nothing :: _) = Nothing
+sequenceQuestion ((Just rec) :: recs) = sequenceQuestion recs >>= (\recs' => Just (rec :: recs'))
+
+
+
 
 -- Ugly hack, since records aren't of the same type and therefore we can't 
 -- use sequence. Also proves to the TC that the lengths are as stated.
@@ -162,38 +181,21 @@ parseDNSPacket (hdr ## qdcount ## ancount ## nscount ##
   let n_arcount = intToNat $ val arcount
   qs' <- mapVE parseDNSQuestion qs
   -- sequence results in TC not terminating
-  let qs_ = sequence qs'
-  -- let qs'' = map (lemma_vect_len n_qdcount) (sequence qs')
-  ?mv_dnsp {-
+  -- let qs_ = sequence qs'
+  let qs'' = sequenceQuestion qs' >>= lemma_vect_len n_qdcount
   as' <- mapVE parseDNSRecord as
   auths' <- mapVE parseDNSRecord auths
   additionals' <- mapVE parseDNSRecord additionals
   let records = sequenceRecords n_ancount n_nscount n_arcount as' auths' additionals'
   -- Now, see if everything was successful!
   case (hdr', qs'', records) of
-    (Just hdr'', Just qs''', Right (as'', auths'', additionals'')) =>
-      return $ Right (MkDNS hdr n_qdcount n_ancount n_nscount
+    (Just hdr'', Just qs''', Right (as'', auths'', additionals'')) => -- ?mv_rcase
+      return $ Right (MkDNS hdr'' n_qdcount n_ancount n_nscount
                 n_arcount qs''' as'' auths'' additionals'')
     -- Record parsing may throw an error
     (_, _, Left err) => return $ Left err
     -- Nothing = bad code
     _ => return $ Left BadCode
-    -}
---parseDNSPacket (hdr ## qdcount ## ancount ## nscount ## arcount ## qs ## as ## auths ## additionals) = ?mv
-
-{-
-record DNSPacket : Type where
-  MkDNS : (dnsPcktHeader : DNSHeader) -> 
-          (dnsPcktQDCount : Nat) ->
-          (dnsPcktANCount : Nat) ->
-          (dnsPcktNSCount : Nat) ->
-          (dnsPcktARCount : Nat) ->
-          (dnsPcktQuestions : Vect dnsPcktQDCount DNSQuestion) ->
-          (dnsPcktAnswers : Vect dnsPcktANCount DNSRecord) ->
-          (dnsPcktAuthorities : Vect dnsPcktNSCount DNSRecord) ->
-          (dnsPcktAdditionals : Vect dnsPcktNSCount DNSRecord) ->
-          DNSPacket
--}
 
 
 encodeDNSPacket : DNSPacket -> { [DNSPARSER DNSState] } Eff m (mkTy dns)

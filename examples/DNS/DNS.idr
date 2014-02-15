@@ -196,7 +196,7 @@ record DNSPacket : Type where
           (dnsPcktQuestions : Vect dnsPcktQDCount DNSQuestion) ->
           (dnsPcktAnswers : Vect dnsPcktANCount DNSRecord) ->
           (dnsPcktAuthorities : Vect dnsPcktNSCount DNSRecord) ->
-          (dnsPcktAdditionals : Vect dnsPcktNSCount DNSRecord) ->
+          (dnsPcktAdditionals : Vect dnsPcktARCount DNSRecord) ->
           DNSPacket
 -- Verified implementation of the DNS packet specification
 
