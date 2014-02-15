@@ -5,6 +5,7 @@
 module DNS
 
 import Network.PacketLang
+import Network.Socket
 
 %access public
 
@@ -62,6 +63,22 @@ codeToDNSQClass : Int -> Maybe DNSQClass
 codeToDNSQClass 255 = Just AnyClass
 codeToDNSQClass i = map DNSBaseClass (codeToDNSClass i)
 
+-- A few constants... Might change this
+A_VAL : Int
+A_VAL = 1
+
+NS_VAL : Int
+NS_VAL = 2
+
+CNAME_VAL : Int
+CNAME_VAL = 5
+
+AAAA_VAL : Int
+AAAA_VAL = 28
+
+IN_VAL : Int
+IN_VAL = 1
+
 -- Type descriptions taken from RFC1035
 data DNSType = A -- A host address
              | NS -- An authoritative name server
@@ -79,6 +96,7 @@ data DNSType = A -- A host address
              | MINFO -- Mailbox or mail list informatio n
              | MX -- Mail exchange
              | TXT -- Text record
+             | AAAA -- IPv6 Host Address
 
 data DNSQType = AXFR -- Request for transfer of entire zone
               | MAILB -- Request for mailbox-related records
@@ -88,13 +106,13 @@ data DNSQType = AXFR -- Request for transfer of entire zone
                                   -- are also valid
 
 {- TODO (possibly?): make this a tad cleaner -}
-
+total
 dnsTypeToCode : DNSType -> Int
-dnsTypeToCode A = 1
-dnsTypeToCode NS = 2
+dnsTypeToCode A = A_VAL
+dnsTypeToCode NS = NS_VAL
 dnsTypeToCode MD = 3
 dnsTypeToCode MF = 4
-dnsTypeToCode CNAME = 5
+dnsTypeToCode CNAME = CNAME_VAL
 dnsTypeToCode SOA = 6
 dnsTypeToCode MB = 7
 dnsTypeToCode MG = 8
@@ -106,13 +124,14 @@ dnsTypeToCode HINFO = 13
 dnsTypeToCode MINFO = 14
 dnsTypeToCode MX = 15
 dnsTypeToCode TXT = 16
+dnsTypeToCode AAAA = AAAA_VAL
 
 codeToDNSType : Int -> Maybe DNSType
 codeToDNSType i = 
   lookup i (the (List (Int, DNSType)) 
-            [(1, A), (2, NS), (3, MD), (4, MF), (5, CNAME), (6, SOA), (7, MB), 
+            [(A_VAL, A), (NS_VAL, NS), (3, MD), (4, MF), (CNAME_VAL, CNAME), (6, SOA), (7, MB), 
              (8, MG), (9, MR), (10, NULL), (11, WKS), (12, PTR), (13, HINFO), 
-             (14, MINFO), (15, MX), (16, TXT)
+             (14, MINFO), (15, MX), (16, TXT), (AAAA_VAL, AAAA)
             ])
 
 dnsQTypeToCode : DNSQType -> Int
@@ -128,6 +147,36 @@ codeToDNSQType 253 = Just MAILB
 codeToDNSQType 254 = Just MAILA
 codeToDNSQType 255 = Just ALL
 codeToDNSQType i = map DNSBaseTy (codeToDNSType i)
+
+data DNSPayloadType = DNSIPv4 | DNSIPv6 | DNSDomain | DNSUnimplementedPayload
+
+
+data DNSPayload : DNSPayloadType -> Type where
+  -- TODO: It would be nice to specialise SocketAddress further, ideally
+  -- by declaring it as a GADT and parameterising it over the type of 
+  -- address. Not quite sure how that's going to work with the rest of
+  -- the code though...
+  DNSIPv4Payload : SocketAddress -> DNSPayload DNSIPv4 
+  DNSIPv6Payload : SocketAddress -> DNSPayload DNSIPv6
+  DNSDomainPayload : List DomainFragment -> DNSPayload DNSDomain
+  DNSNotImplementedPayload : DNSPayload DNSUnimplementedPayload -- get out clause!
+
+payloadType : DNSType -> DNSClass -> Type
+payloadType A IN = DNSPayload DNSIPv4
+payloadType AAAA IN = DNSPayload DNSIPv6
+payloadType NS IN = DNSPayload DNSDomain
+payloadType CNAME IN = DNSPayload DNSDomain
+payloadType _ _ = DNSPayload DNSUnimplementedPayload
+
+-- Hopefully there's a nicer way to do this
+total
+ipayloadType : Int -> Int -> Type
+ipayloadType 1 1 = DNSPayload DNSIPv4
+ipayloadType 28 1 = DNSPayload DNSIPv6
+ipayloadType 2 1 = DNSPayload DNSDomain
+ipayloadType 5 1 = DNSPayload DNSDomain
+ipayloadType _ _ = DNSPayload DNSUnimplementedPayload
+
 
 instance Code DNSType where
   toCode x = dnsTypeToCode x
@@ -148,7 +197,7 @@ data DNSRecord : Type where
                 (dnsRRType : DNSType) ->
                 (dnsRRClass : DNSClass) ->
                 (dnsRRTTL : Int) ->
-                (dnsRRPayload : Int) -> -- FIXME Temp, haven't decided how to do this yet
+                (dnsRRPayload : payloadType dnsRRType dnsRRClass) ->
                 DNSRecord
 
 data DNSResponse = DNSNoError
@@ -265,6 +314,28 @@ dnsQuestion = do dnsDomain
                  qclass <- bits 16 
                  check (validQCLASS 16)
 
+dnsIP : PacketLang
+dnsIP = do
+  bits 8
+  bits 8
+  bits 8
+  bits 8
+
+{-  Pending compiler bugfix...
+dnsPayloadLang : (ty : Int) -> (cls : Int) -> PacketLang
+dnsPayloadLang A_VAL IN_VAL = dnsIP
+dnsPayloadLang CNAME_VAL IN_VAL = dnsDomain
+dnsPayloadLang NS_VAL IN_VAL = dnsDomain
+dnsPayloadLang AAAA_VAL IN_VAL = null
+dnsPayloadLang _ _ = null
+-}
+dnsPayloadLang : (ty : Int) -> (cls : Int) -> PacketLang
+dnsPayloadLang 1 1 = dnsIP
+dnsPayloadLang 2 1 = dnsDomain
+dnsPayloadLang 5 1 = dnsDomain
+dnsPayloadLang 28 1 = null
+dnsPayloadLang _ _ = null
+
 -- abstract
 dnsHeader : PacketLang
 dnsHeader = do ident <- bits 16 -- Request identifier
@@ -285,14 +356,17 @@ dnsHeader = do ident <- bits 16 -- Request identifier
 dnsRR : PacketLang
 dnsRR = do domain <- dnsDomain
            ty <- bits 16
-           check (validTYPE (val ty))
+           let vt = val ty
+           check (validTYPE vt)
            cls <- bits 16
-           check (validCLASS (val cls))
+           let vc = val cls
+           check (validCLASS vc)
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
            let vl = ((val len) * 8)
            prf <- check (vl > 0)
-           bounded_bits vl prf
+           dnsPayloadLang vt vc
+--           bounded_bits vl prf
 
 dns : PacketLang
 dns = do header <- dnsHeader

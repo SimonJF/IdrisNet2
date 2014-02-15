@@ -11,7 +11,7 @@ DNSReference = Int
 data DNSParseError = NonexistentRef Int -- Bad reference
                    | BadCode -- Error decoding something from an int to a datatype
                    | InternalError String -- Something else
-
+                   | PayloadUnimplemented Int Int
 record DNSState : Type where
   MkDNSState : (blob : RawPacket) ->
                (labelCache : List (Position, List DomainFragment)) ->
@@ -111,14 +111,61 @@ parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = do
     _ => return Nothing
 
 
+decodeIP : (mkTy dnsIP) -> SocketAddress
+decodeIP (i1 ## i2 ## i3 ## i4) = 
+  IPv4Addr (val i1) (val i2) (val i3) (val i4)
+
+decodeNone : (mkTy null) -> ()
+decodeNone _ = ()
+
+-- NOTE: These must correspond to the values in ipayloadType. Which is a good thing!
+partial
+decodePayload : (ty : Int) -> 
+                (cls : Int) -> 
+                (mkTy (dnsPayloadLang ty cls)) -> 
+                { [DNSPARSER DNSState] }
+                Eff m (Either DNSParseError (ipayloadType ty cls))
+decodePayload 1 1 ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
+decodePayload 2 1 domain_pl = do
+  domain <- decodeDomain domain_pl
+  case domain of
+    Left err => return $ Left err
+    Right domain' => return $ Right (DNSDomainPayload domain')
+decodePayload 5 1 domain_pl = ?mv
+decodePayload 28 1 ip6_pl = return $ Right (DNSIPv6Payload IPv6Addr)
+-- Initially I thought to handle this as an unimplemented payload type,
+-- but really it's probably best as an error in any case
+decodePayload ty cls _ = return $ Left (PayloadUnimplemented ty cls)
+--return $ Right (DNSUnimplementedPayload)
+
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
                    Eff m (Either DNSParseError DNSRecord)
 parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ##
-                len ## len_prf ## payload) = ?mv
+                len ## len_prf ## payload) = do
+  domain <- decodeDomain encoded_domain
+  let ty' = val ty
+  let cls' = val cls
+  let ttl' = val ttl
+  let len' = val len
+  -- I *think* (thanks to neweffects) that the TC will have enough info here...
+  let payload' = decodePayload ty' cls' payload
+  -- Next challenge: we currently have a payload of type (ipayloadType ty' cls'),
+  -- and we need one of type (payloadType ty'' cls'') where ty'' is a DNSType and
+  -- cls'' is a DNSClass. Possible solution would be to change fromCode to something else,
+  -- giving us a mapping, and from there doing some lemma of type something like...
+  -- (ty : Int) -> (cls : Int) -> (ty' : fromCode ty) -> (cls' : fromCode cls) -> 
+  -- (ipayloadType ty' cls') -> (ipayloadType ty' cls' = payloadType ty cls) -> 
+  -- (payloadType (fromCode ty) (fromCode cls))
+  -- possibly using cong? Not sure exactly, but I've been working a long time and will 
+  -- be fresher tomorrow.
+  ?mv
+
 --parseDNSRecord (encoded_domain ## ty ##  = ?mv
 
-
+-- TODO: We already know that n is (intToNat (val arcount)) and that
+-- the vector is of type (Vect (intToNat (val arcount))). This is the
+-- wrong way to prove it to the TC.
 lemma_vect_len : (n : Nat) -> (v : Vect m a) -> Maybe (Vect n a)
 lemma_vect_len Z [] = Just []
 lemma_vect_len (S k) [] = Nothing
@@ -177,7 +224,7 @@ parseDNSPacket (hdr ## qdcount ## ancount ## nscount ##
   let hdr' = parseDNSHeader hdr
   let n_qdcount = intToNat $ val qdcount
   let n_ancount = intToNat $ val ancount
-  let n_nscount= intToNat $ val nscount
+  let n_nscount = intToNat $ val nscount
   let n_arcount = intToNat $ val arcount
   qs' <- mapVE parseDNSQuestion qs
   -- sequence results in TC not terminating

@@ -108,7 +108,6 @@ mutual
 
 -- Decode chunks into Idris types
 -- TODO <<
-partial
 chunkTy : Chunk -> Type
 chunkTy (Bit w p) = Bounded w -- FIXME, take into account bit width
 chunkTy CString = String
@@ -126,6 +125,7 @@ mutual
     (//) : PacketLang -> PacketLang -> PacketLang
     LIST : PacketLang -> PacketLang
     LISTN : (n : Nat) -> PacketLang -> PacketLang
+    NULL : PacketLang -- Sometimes, we want to signify that there's nothing there
     (>>=) : (p : PacketLang) -> (mkTy p -> PacketLang) -> PacketLang
     
   -- Packet language decoding
@@ -135,6 +135,7 @@ mutual
   mkTy (l // r) = Either (mkTy l) (mkTy r)
   mkTy (LIST x) = List (mkTy x)
   mkTy (LISTN n a) = Vect n (mkTy a)
+  mkTy NULL = ()
   mkTy (c >>= k) = (x ** mkTy (k x))
 
 
@@ -165,6 +166,7 @@ bitLength (IF False _ no) x = bitLength no x
 bitLength (y // z) x = either (\l_x => bitLength y l_x) (\r_x => bitLength z r_x) x
 bitLength (LIST pl) x = listLength pl x
 bitLength (LISTN n pl) x = vectLength pl x
+bitLength NULL _ = 0
 bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 
@@ -193,3 +195,4 @@ syntax prop_or [p1] [p2] = (CHUNK (Prop (P_OR p1 p2)))
 syntax prop_and [p1] [p2] = (CHUNK (Prop (P_AND p1 p2)))
 syntax prop_eq [p1] [p2] = (CHUNK (Prop (P_EQ p1 p2)))
 syntax bounded_bits [len] [prf] = (CHUNK (Bit len prf))
+syntax null = NULL

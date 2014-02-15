@@ -91,6 +91,7 @@ marshal' ap (pl_1 // pl_2) x = either (\x_l => marshal' ap pl_1 x_l)
                                       (\x_r => marshal' ap pl_2 x_r) x
 marshal' ap (LIST pl) xs = marshalList ap pl xs
 marshal' ap (LISTN n pl) xs = marshalVect ap pl xs
+marshal' _ NULL _ = return 0
 marshal' ap (c >>= k) (x ** y) = do
   len <- marshal' ap c x
   let (ActivePacketRes pckt pos p_len) = ap
@@ -265,6 +266,7 @@ unmarshal' ap (x // y) = do
   --       (\(x_res', len) => Just $ (Left x_res', len)) x_res)
 unmarshal' ap (LIST pl) = Just (unmarshalList ap pl)
 unmarshal' ap (LISTN n pl) = unmarshalVect ap pl n
+unmarshal' ap NULL = Just ((), 0)
 unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
   res1_tup <- unmarshal' (ActivePacketRes pckt pos p_len) c 
   -- Hack hack hack around the TC resolution bug...
