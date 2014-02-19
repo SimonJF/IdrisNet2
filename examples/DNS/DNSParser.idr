@@ -69,11 +69,14 @@ unmarshalReference ref = UnmarshalReference ref
 
 parseDNSHeader : (mkTy dnsHeader) -> Maybe DNSHeader
 parseDNSHeader (ident ## qr ## opcode ## opcode_prf ## aa ## tc ## rd ## 
-                ra ## z ## z_prf ## resp ## resp_prf) = do
+                ra ## z ## z_prf ## resp ## resp_prf) = ?mv
+
+{-
+do
   op <- fromCode $ val opcode
   resp' <- fromCode $ val resp
   return $ MkDNSHeader (val ident) qr op aa tc rd ra resp'
-  
+  -}
 
 decodeReference : DNSReference -> { [DNSPARSER DNSState] } 
                   Eff m (Either DNSParseError (List DomainFragment))
@@ -104,12 +107,13 @@ decodeDomain (Left (_ ## ref)) = decodeReference (val ref)
 decodeDomain (Right encoded_lbls) = decodeLabels encoded_lbls
 
 parseDNSQuestion : (mkTy dnsQuestion) -> { [DNSPARSER DNSState] } Eff m (Maybe DNSQuestion)
-parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = do
+parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = ?mv
+{- do
   decoded_domain <- decodeDomain encoded_domain
   case (decoded_domain, codeToDNSQType (val qt), codeToDNSQClass (val qc)) of
     (Right domain', Just qt', Just qc') => return $ Just (MkDNSQuestion domain' qt' qc')
     _ => return Nothing
-
+-}
 
 decodeIP : (mkTy dnsIP) -> SocketAddress
 decodeIP (i1 ## i2 ## i3 ## i4) = 
@@ -118,13 +122,23 @@ decodeIP (i1 ## i2 ## i3 ## i4) =
 decodeNone : (mkTy null) -> ()
 decodeNone _ = ()
 
--- NOTE: These must correspond to the values in ipayloadType. Which is a good thing!
-partial
+
+decodePayload : (pl_rel : DNSPayloadRel ty cl pl_ty) ->
+                (ty_rel : DNSTypeRel i_ty ty) ->
+                (cl_rel : DNSClassRel i_cl cl) ->
+                (i_cl : Int) ->
+                (mkTy (dnsPayloadLang i_ty i_cl)) ->
+                { [DNSPARSER DNSState] }
+                Eff m (Either DNSParseError (DNSPayload pl_ty))
+decodePayload = ?mv_payload
+                
+
+{-
 decodePayload : (ty : Int) -> 
                 (cls : Int) -> 
                 (mkTy (dnsPayloadLang ty cls)) -> 
                 { [DNSPARSER DNSState] }
-                Eff m (Either DNSParseError (ipayloadType ty cls))
+                Eff m (Either DNSParseError (ipayloadType ty cls)) -
 decodePayload 1 1 ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
 decodePayload 2 1 domain_pl = do
   domain <- decodeDomain domain_pl
@@ -137,12 +151,13 @@ decodePayload 28 1 ip6_pl = return $ Right (DNSIPv6Payload IPv6Addr)
 -- but really it's probably best as an error in any case
 decodePayload ty cls _ = return $ Left (PayloadUnimplemented ty cls)
 --return $ Right (DNSUnimplementedPayload)
-
+-}
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
                    Eff m (Either DNSParseError DNSRecord)
 parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ##
-                len ## len_prf ## payload) = do
+                len ## len_prf ## payload) = do ?mv
+{-
   domain <- decodeDomain encoded_domain
   let ty' = val ty
   let cls' = val cls
@@ -160,7 +175,7 @@ parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ##
   -- possibly using cong? Not sure exactly, but I've been working a long time and will 
   -- be fresher tomorrow.
   ?mv
-
+-}
 --parseDNSRecord (encoded_domain ## ty ##  = ?mv
 
 -- TODO: We already know that n is (intToNat (val arcount)) and that
@@ -173,12 +188,6 @@ lemma_vect_len Z xs = Nothing
 lemma_vect_len (S k) (x :: xs) = do
   xs' <- lemma_vect_len k xs
   return $ x :: xs' -- applicative... (Just x) :: (lemma_vect_len k xs) 
-
--- Temp, until something makes it into the library
-mapVE : Applicative m => (a -> {xs} Eff m b) -> Vect n a -> {xs} Eff m (Vect n b)
-mapVE f []        = pure []
-mapVE f (x :: xs) = [| f x :: mapVE f xs |]
-
 
 -- FIXME: For some reason, sequence isn't working (causing infinite TC loop)
 -- so here's a specialised version...
