@@ -11,7 +11,8 @@ import Effects
 data ClientConnected : Type where
   CC : Socket -> ClientConnected
 
--- 
+-- State recording that an error occurred (therefore no operations 
+-- may be performed)
 data ErrorState : Type where
   ES : Socket -> ErrorState
 

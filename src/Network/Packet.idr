@@ -277,9 +277,9 @@ unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
 
 
 {- Publicly-Facing Functions... -}
-public
 -- | Given a packet language and a packet, creates a RawPacket that
 -- | may be sent over the network by a UDP or TCP socket
+public
 marshal : (pl : PacketLang) -> (mkTy pl) -> IO (RawPacket, Length)
 marshal pl dat = do
   let pckt_len = bitLength pl dat
@@ -289,8 +289,8 @@ marshal pl dat = do
   --dumpPacket pckt 1024
   return (pckt, len)
 
-public 
 -- | Given a packet language and a RawPacket, unmarshals the packet
+public 
 unmarshal : (pl : PacketLang) -> 
             RawPacket -> 
             Length -> 
@@ -301,8 +301,8 @@ unmarshal pl pckt len = do
   return $ (unmarshal' (ActivePacketRes pckt 0 len) pl) 
   
 
-public
 -- | Destroys a RawPacket
+public
 freePacket : RawPacket -> IO ()
 freePacket (RawPckt pckt) = mkForeign (FFun "freePacket" [FPtr] FUnit) pckt
 

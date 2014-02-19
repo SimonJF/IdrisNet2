@@ -49,9 +49,9 @@ interpListenRes ConnectionClosed = ()
 interpListenRes (RecoverableError _) = ServerBound
 interpListenRes (FatalError _) = ServerError
 
-interpBindRes : SocketOperationRes a -> Type
-interpBindRes (OperationSuccess _) = ServerBound
-interpBindRes _ = ()
+interpTCPServerBindRes : SocketOperationRes a -> Type
+interpTCPServerBindRes (OperationSuccess _) = ServerBound
+interpTCPServerBindRes _ = ()
 
 {- This is an effect that deals with an accepted client. We're allowed to 
    read from, write to, and close this socket. 
@@ -174,8 +174,8 @@ instance Handler TCPServerClient IO where
            k (OperationSuccess res) (CC sock addr) 
 
 data TCPServer : Effect where
-  -- Bind a socket to a given address and port
-  Bind : SocketAddress -> Port -> { () ==> interpBindRes result }
+  -- TCPServerBind a socket to a given address and port
+  TCPServerBind : SocketAddress -> Port -> { () ==> interpTCPServerBindRes result }
                                   TCPServer (SocketOperationRes ()) 
   -- Listen
   Listen : { ServerBound ==> interpListenRes result } 
@@ -198,9 +198,9 @@ TCPSERVER t = MkEff t TCPServer
 
 {- TCP Accessor Functions -}
 
-bind : SocketAddress -> Port -> { [TCPSERVER ()] ==> [TCPSERVER (interpBindRes result)] } 
+bind : SocketAddress -> Port -> { [TCPSERVER ()] ==> [TCPSERVER (interpTCPServerBindRes result)] } 
                                 Eff IO (SocketOperationRes ())
-bind sa p = (Bind sa p)
+bind sa p = (TCPServerBind sa p)
 
 listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] } 
          Eff IO (SocketOperationRes ())
@@ -227,7 +227,7 @@ finaliseServer = Finalise
 
 {- Handler Functions -}
 instance Handler TCPServer IO where 
-  handle () (Bind sa p) k = do
+  handle () (TCPServerBind sa p) k = do
     sock_res <- socket AF_INET Stream 0
     case sock_res of
       Left err => k (FatalError err) ()
