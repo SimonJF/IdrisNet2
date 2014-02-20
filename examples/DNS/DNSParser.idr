@@ -178,17 +178,6 @@ parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ##
 -}
 --parseDNSRecord (encoded_domain ## ty ##  = ?mv
 
--- TODO: We already know that n is (intToNat (val arcount)) and that
--- the vector is of type (Vect (intToNat (val arcount))). This is the
--- wrong way to prove it to the TC.
-lemma_vect_len : (n : Nat) -> (v : Vect m a) -> Maybe (Vect n a)
-lemma_vect_len Z [] = Just []
-lemma_vect_len (S k) [] = Nothing
-lemma_vect_len Z xs = Nothing
-lemma_vect_len (S k) (x :: xs) = do
-  xs' <- lemma_vect_len k xs
-  return $ x :: xs' -- applicative... (Just x) :: (lemma_vect_len k xs) 
-
 -- FIXME: For some reason, sequence isn't working (causing infinite TC loop)
 -- so here's a specialised version...
 sequenceRecord : Vect n (Either DNSParseError DNSRecord) ->
@@ -209,20 +198,15 @@ sequenceQuestion ((Just rec) :: recs) = sequenceQuestion recs >>= (\recs' => Jus
 -- Ugly hack, since records aren't of the same type and therefore we can't 
 -- use sequence. Also proves to the TC that the lengths are as stated.
 sequenceRecords : 
-               (n' : Nat) -> 
-               (m' : Nat) -> 
-               (l' : Nat) ->
                Vect n (Either DNSParseError DNSRecord) -> 
                Vect m (Either DNSParseError DNSRecord) -> 
                Vect l (Either DNSParseError DNSRecord) -> 
-               Either DNSParseError (Vect n' DNSRecord, Vect m' DNSRecord, Vect l' DNSRecord)
-sequenceRecords n m l v1 v2 v3 = do
+               Either DNSParseError (Vect n DNSRecord, Vect m DNSRecord, Vect l DNSRecord)
+sequenceRecords v1 v2 v3 = do
   v1' <- sequence v1
   v2' <- sequence v2
   v3' <- sequence v3
-  case (lemma_vect_len n v1', lemma_vect_len m v2', lemma_vect_len l v3') of
-      (Just v1'', Just v2'', Just v3'') => Right (v1'', v2'', v3'')
-      _ => Left $ InternalError "Vect length mismatch. This shouldn't happen!"
+  return (v1', v2', v3')
 
 parseDNSPacket : Applicative m =>
                  (mkTy dns) ->  
@@ -238,16 +222,16 @@ parseDNSPacket (hdr ## qdcount ## ancount ## nscount ##
   qs' <- mapVE parseDNSQuestion qs
   -- sequence results in TC not terminating
   -- let qs_ = sequence qs'
-  let qs'' = sequenceQuestion qs' >>= lemma_vect_len n_qdcount
+  let qs'' = sequenceQuestion qs' 
   as' <- mapVE parseDNSRecord as
   auths' <- mapVE parseDNSRecord auths
   additionals' <- mapVE parseDNSRecord additionals
-  let records = sequenceRecords n_ancount n_nscount n_arcount as' auths' additionals'
+  let records = sequenceRecords as' auths' additionals'
   -- Now, see if everything was successful!
   case (hdr', qs'', records) of
     (Just hdr'', Just qs''', Right (as'', auths'', additionals'')) => -- ?mv_rcase
-      return $ Right (MkDNS hdr'' n_qdcount n_ancount n_nscount
-                n_arcount qs''' as'' auths'' additionals'')
+      return $ Right (MkDNS hdr'' _ _ _ _
+                qs''' as'' auths'' additionals'')
     -- Record parsing may throw an error
     (_, _, Left err) => return $ Left err
     -- Nothing = bad code
