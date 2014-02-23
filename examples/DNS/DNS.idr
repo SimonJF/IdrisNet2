@@ -31,7 +31,8 @@ data DNSRecord : Type where
                 (dnsRRType : DNSType) ->
                 (dnsRRClass : DNSClass) ->
                 (dnsRRTTL : Int) ->
-                (dnsRRPayload : payloadType dnsRRType dnsRRClass) ->
+                (dnsRRRel : DNSPayloadRel dnsRRType dnsRRClass pl_ty) -> 
+                (dnsRRPayload : DNSPayload pl_ty) ->
                 DNSRecord
 
 

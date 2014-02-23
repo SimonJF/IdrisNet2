@@ -11,7 +11,7 @@ DNSReference = Int
 data DNSParseError = NonexistentRef Int -- Bad reference
                    | BadCode -- Error decoding something from an int to a datatype
                    | InternalError String -- Something else
-                   | PayloadUnimplemented Int Int
+                   | PayloadUnimplemented
 record DNSState : Type where
   MkDNSState : (blob : RawPacket) ->
                (labelCache : List (Position, List DomainFragment)) ->
@@ -122,61 +122,54 @@ decodeIP (i1 ## i2 ## i3 ## i4) =
 decodeNone : (mkTy null) -> ()
 decodeNone _ = ()
 
-
-decodePayload : (pl_rel : DNSPayloadRel ty cl pl_ty) ->
-                (ty_rel : DNSTypeRel i_ty ty) ->
-                (cl_rel : DNSClassRel i_cl cl) ->
-                (i_cl : Int) ->
-                (mkTy (dnsPayloadLang i_ty i_cl)) ->
-                { [DNSPARSER DNSState] }
-                Eff m (Either DNSParseError (DNSPayload pl_ty))
-decodePayload = ?mv_payload
-                
-
-{-
-decodePayload : (ty : Int) -> 
-                (cls : Int) -> 
-                (mkTy (dnsPayloadLang ty cls)) -> 
-                { [DNSPARSER DNSState] }
-                Eff m (Either DNSParseError (ipayloadType ty cls)) -
-decodePayload 1 1 ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
-decodePayload 2 1 domain_pl = do
-  domain <- decodeDomain domain_pl
+decodeDomainPayload : (mkTy dnsDomain) -> 
+                      { [DNSPARSER DNSState] }
+                      Eff m (Either DNSParseError (DNSPayload DNSDomain))
+decodeDomainPayload dom_pl = do
+  domain <- decodeDomain dom_pl
   case domain of
     Left err => return $ Left err
     Right domain' => return $ Right (DNSDomainPayload domain')
-decodePayload 5 1 domain_pl = ?mv
-decodePayload 28 1 ip6_pl = return $ Right (DNSIPv6Payload IPv6Addr)
--- Initially I thought to handle this as an unimplemented payload type,
--- but really it's probably best as an error in any case
-decodePayload ty cls _ = return $ Left (PayloadUnimplemented ty cls)
---return $ Right (DNSUnimplementedPayload)
--}
+
+total
+decodePayload : (pl_rel : DNSPayloadRel ty cl pl_ty) ->
+                (ty_rel : DNSTypeRel i_ty ty) ->
+                (cl_rel : DNSClassRel i_cl cl) ->
+                (mkTy (dnsPayloadLang i_ty i_cl)) ->
+                { [DNSPARSER DNSState] }
+                Eff m (Either DNSParseError (DNSPayload pl_ty))
+decodePayload DNSPayloadRelIP DNSTypeRelA DNSClassRelIN ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
+decodePayload DNSPayloadRelCNAME DNSTypeRelCNAME DNSClassRelIN dom_pl = decodeDomainPayload dom_pl
+decodePayload DNSPayloadRelNS DNSTypeRelNS DNSClassRelIN dom_pl = decodeDomainPayload dom_pl
+decodePayload _ _ _ _ = return $ Left (PayloadUnimplemented)
+
+getRelations : (ty_code : Int) -> 
+               (cls_code : Int) -> 
+               Maybe (DNSTypeRel ty_code ty, DNSClassRel cls_code cls)
+getRelations ty_code cls_code = do
+  t_rel <- dnsCodeToType ty_code
+  c_rel <- dnsCodeToClass cls_code
+  return (t_rel, c_rel)
+
+
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
-                   Eff m (Either DNSParseError DNSRecord)
-parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ##
-                len ## len_prf ## payload) = do ?mv
-{-
-  domain <- decodeDomain encoded_domain
-  let ty' = val ty
-  let cls' = val cls
+                 Eff m (Either DNSParseError DNSRecord)
+parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ## len ## len_prf ## payload) = do
   let ttl' = val ttl
-  let len' = val len
-  -- I *think* (thanks to neweffects) that the TC will have enough info here...
-  let payload' = decodePayload ty' cls' payload
-  -- Next challenge: we currently have a payload of type (ipayloadType ty' cls'),
-  -- and we need one of type (payloadType ty'' cls'') where ty'' is a DNSType and
-  -- cls'' is a DNSClass. Possible solution would be to change fromCode to something else,
-  -- giving us a mapping, and from there doing some lemma of type something like...
-  -- (ty : Int) -> (cls : Int) -> (ty' : fromCode ty) -> (cls' : fromCode cls) -> 
-  -- (ipayloadType ty' cls') -> (ipayloadType ty' cls' = payloadType ty cls) -> 
-  -- (payloadType (fromCode ty) (fromCode cls))
-  -- possibly using cong? Not sure exactly, but I've been working a long time and will 
-  -- be fresher tomorrow.
-  ?mv
+  domain <- (decodeDomain encoded_domain)
+  let m_rels = getRelations (val ty) (val cls)
+  return $ Left PayloadUnimplemented
+  --case m_rels of
+    --Just something => return $ Left PayloadUnimplemented
+{-    Just (pl_rel, ty_rel, cls_rel) => do
+      payload' <- decodePayload pl_rel ty_rel cls_rel payload
+      case (domain, payload') of 
+       -- (Left err, _) => return $ Left err
+       -- (_, Left err) => return $ Left err
+        (Right domain'', Right payload'') => return $ Left PayloadUnimplemented -- Right (MkDNSRecord domain'' _ _ ttl' pl_rel payload'')
+    Nothing => return $ Left PayloadUnimplemented
 -}
---parseDNSRecord (encoded_domain ## ty ##  = ?mv
 
 -- FIXME: For some reason, sequence isn't working (causing infinite TC loop)
 -- so here's a specialised version...
