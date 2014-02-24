@@ -69,14 +69,11 @@ unmarshalReference ref = UnmarshalReference ref
 
 parseDNSHeader : (mkTy dnsHeader) -> Maybe DNSHeader
 parseDNSHeader (ident ## qr ## opcode ## opcode_prf ## aa ## tc ## rd ## 
-                ra ## z ## z_prf ## resp ## resp_prf) = ?mv
-
-{-
-do
-  op <- fromCode $ val opcode
-  resp' <- fromCode $ val resp
+                ra ## z ## z_prf ## resp ## resp_prf) = do
+  op <- codeToDNSOpcode $ (val opcode)
+  resp' <- dnsCodeToResponse $ (val resp)
   return $ MkDNSHeader (val ident) qr op aa tc rd ra resp'
-  -}
+  
 
 decodeReference : DNSReference -> { [DNSPARSER DNSState] } 
                   Eff m (Either DNSParseError (List DomainFragment))
@@ -143,14 +140,26 @@ decodePayload DNSPayloadRelCNAME DNSTypeRelCNAME DNSClassRelIN dom_pl = decodeDo
 decodePayload DNSPayloadRelNS DNSTypeRelNS DNSClassRelIN dom_pl = decodeDomainPayload dom_pl
 decodePayload _ _ _ _ = return $ Left (PayloadUnimplemented)
 
+
 getRelations : (ty_code : Int) -> 
                (cls_code : Int) -> 
-               Maybe (DNSTypeRel ty_code ty, DNSClassRel cls_code cls)
-getRelations ty_code cls_code = do
-  t_rel <- dnsCodeToType ty_code
-  c_rel <- dnsCodeToClass cls_code
-  return (t_rel, c_rel)
+               (ty : DNSType) ->
+               (cls : DNSClass) ->
+               (pl_ty : DNSPayloadType) ->
+               Maybe (DNSTypeRel ty_code ty, DNSClassRel cls_code cls, DNSPayloadRel ty cls pl_ty)
+getRelations ty_code cls_code ty cls pl_ty = do
+  t_rel <- dnsTypeRel ty_code ty
+  c_rel <- dnsClassRel cls_code cls
+  pl_rel <- getPayloadRel pl_ty ty cls
+  return (t_rel, c_rel, pl_rel)
 
+
+decodeRecordCodes : (ty_code : Int) -> (cls_code : Int) -> Maybe (DNSType, DNSClass, DNSPayloadType)
+decodeRecordCodes ty_code cls_code = do
+  ty <- dnsCodeToType ty_code
+  cls <- dnsCodeToClass cls_code
+  pl_ty <- payloadType ty cls
+  return (ty, cls, pl_ty)
 
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
@@ -158,18 +167,18 @@ parseDNSRecord : (mkTy dnsRR) ->
 parseDNSRecord (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ## len ## len_prf ## payload) = do
   let ttl' = val ttl
   domain <- (decodeDomain encoded_domain)
-  let m_rels = getRelations (val ty) (val cls)
-  return $ Left PayloadUnimplemented
-  --case m_rels of
-    --Just something => return $ Left PayloadUnimplemented
-{-    Just (pl_rel, ty_rel, cls_rel) => do
-      payload' <- decodePayload pl_rel ty_rel cls_rel payload
-      case (domain, payload') of 
-       -- (Left err, _) => return $ Left err
-       -- (_, Left err) => return $ Left err
-        (Right domain'', Right payload'') => return $ Left PayloadUnimplemented -- Right (MkDNSRecord domain'' _ _ ttl' pl_rel payload'')
+  case decodeRecordCodes (val ty) (val cls) of
+    Just (ty', cls', pl_ty) => do
+      let m_rels = getRelations (val ty) (val cls) ty' cls' pl_ty
+      case m_rels of
+        Just (ty_rel, cls_rel, pl_rel) => do
+          payload' <- decodePayload pl_rel ty_rel cls_rel payload
+          case (domain, payload') of 
+            (Left err, _) => return $ Left err
+            (_, Left err) => return $ Left err
+            (Right domain'', Right payload'') => return $ Right (MkDNSRecord domain'' ty' cls' ttl' pl_rel payload'')
     Nothing => return $ Left PayloadUnimplemented
--}
+
 
 -- FIXME: For some reason, sequence isn't working (causing infinite TC loop)
 -- so here's a specialised version...

@@ -17,21 +17,25 @@ import Network.Socket
 
 data DNSHdrOpcode = QUERY | IQUERY | STATUS
 
+{-
 data DNSHdrOpcodeRel : Int -> DNSHdrOpcode -> Type where
   DNSHdrOpcodeRelQUERY : DNSHdrOpcodeRel 0 QUERY
   DNSHdrOpcodeRelIQUERY : DNSHdrOpcodeRel 1 IQUERY
   DNSHdrOpcodeRelSTATUS : DNSHdrOpcodeRel 2 STATUS
 
 
-dnsOpcodeToCode : {code : Int} -> (ty : DNSHdrOpcode) -> DNSHdrOpcodeRel code ty
-dnsOpcodeToCode {code = 0} QUERY = DNSHdrOpcodeRelQUERY 
-dnsOpcodeToCode {code = 1} IQUERY = DNSHdrOpcodeRelIQUERY
-dnsOpcodeToCode {code = 2} STATUS = DNSHdrOpcodeRelSTATUS 
+dnsOpcodeRel : (code : Int) -> (ty : DNSHdrOpcode) -> Maybe (DNSHdrOpcodeRel code ty)
+dnsOpcodeRel 0 QUERY = Just DNSHdrOpcodeRelQUERY 
+dnsOpcodeRel 1 IQUERY = Just DNSHdrOpcodeRelIQUERY
+dnsOpcodeRel 2 STATUS = Just DNSHdrOpcodeRelSTATUS 
+dnsOpcodeRel _ _ = Nothing
+-}
 
-codeToDNSOpcode : {ty : DNSHdrOpcode} -> (code : Int) -> Maybe (DNSHdrOpcodeRel code ty)
-codeToDNSOpcode {ty = QUERY} 0 = Just DNSHdrOpcodeRelQUERY
-codeToDNSOpcode {ty = IQUERY} 1 = Just DNSHdrOpcodeRelIQUERY
-codeToDNSOpcode {ty = STATUS} 2 = Just DNSHdrOpcodeRelSTATUS 
+codeToDNSOpcode : (code : Int) -> Maybe DNSHdrOpcode
+codeToDNSOpcode 0 = Just QUERY
+codeToDNSOpcode 1 = Just IQUERY
+codeToDNSOpcode 2 = Just STATUS
+codeToDNSOpcode _ = Nothing
 
 data DNSClass = DNSClassIN -- Internet
   -- None of the following are used, anyway...
@@ -47,15 +51,16 @@ data DNSClassRel : Int -> DNSClass -> Type where
   DNSClassRelCH : DNSClassRel 3 DNSClassCH
   DNSClassRelHS : DNSClassRel 4 DNSClassHS
 -}
-dnsClassToCode : {code : Int} -> (cls : DNSClass) -> DNSClassRel code cls
-dnsClassToCode {code = 1} DNSClassIN = DNSClassRelIN
+dnsClassRel : (code : Int) -> (cls : DNSClass) -> Maybe (DNSClassRel code cls)
+dnsClassRel 1 DNSClassIN = Just DNSClassRelIN
+dnsClassRel _ _ = Nothing 
 {-
-dnsClassToCode {code = 2} DNSClassCS = DNSClassRelCS
-dnsClassToCode {code = 3} DNSClassCH = DNSClassRelCH
-dnsClassToCode {code = 4} DNSClassHS = DNSClassRelHS
+dnsClassToRel {code = 2} DNSClassCS = DNSClassRelCS
+dnsClassToRel {code = 3} DNSClassCH = DNSClassRelCH
+dnsClassToRel {code = 4} DNSClassHS = DNSClassRelHS
 -}
-dnsCodeToClass : {cls : DNSClass} -> (code : Int) -> Maybe (DNSClassRel code cls)
-dnsCodeToClass {cls = DNSClassIN} 1 = Just DNSClassRelIN
+dnsCodeToClass : (code : Int) -> Maybe DNSClass
+dnsCodeToClass 1 = Just DNSClassIN
 dnsCodeToClass _ = Nothing
 {-
 dnsCodeToClass {cls = DNSClassCS} 2 = Just DNSClassRelCS
@@ -79,16 +84,17 @@ data DNSQClassRel : Int -> DNSQClass -> Type where
 --  DNSQClassRelCH : DNSQClassRel 3 DNSQClassCH
 --  DNSQClassRelHS : DNSQClassRel 4 DNSQClassHS
 
-dnsQClassToCode : {code : Int} -> (cls : DNSQClass) -> DNSQClassRel code cls
-dnsQClassToCode {code = 1} DNSQClassIN = DNSQClassRelIN
-dnsQClassToCode {code = 255} DNSQClassANY = DNSQClassRelANY
---dnsQClassToCode {code = 2} DNSQClassCS = DNSQClassRelCS
---dnsQClassToCode {code = 3} DNSQClassCH = DNSQClassRelCH
---dnsQClassToCode {code = 4} DNSQClassHS = DNSQClassRelHS
+dnsQClassRel : (code : Int) -> (cls : DNSQClass) -> Maybe (DNSQClassRel code cls)
+dnsQClassRel 1 DNSQClassIN = Just DNSQClassRelIN
+dnsQClassRel 255 DNSQClassANY = Just DNSQClassRelANY
+dnsQClassRel _ _ = Nothing
+--dnsQClassToRel {code = 2} DNSQClassCS = DNSQClassRelCS
+--dnsQClassToRel {code = 3} DNSQClassCH = DNSQClassRelCH
+--dnsQClassToRel {code = 4} DNSQClassHS = DNSQClassRelHS
 
-dnsCodeToQClass : {cls : DNSQClass} -> (code : Int) -> Maybe (DNSQClassRel code cls)
-dnsCodeToQClass {cls = DNSQClassIN} 1 = Just DNSQClassRelIN
-dnsCodeToQClass {cls = DNSQClassANY} 255 = Just DNSQClassRelANY
+dnsCodeToQClass : (code : Int) -> Maybe DNSQClass
+dnsCodeToQClass 1 = Just DNSQClassIN
+dnsCodeToQClass 255 = Just DNSQClassANY
 dnsCodeToQClass _ = Nothing
 --dnsCodeToQClass {cls = DNSQClassCS} 2 = Just DNSQClassRelCS
 --dnsCodeToQClass {cls = DNSQClassCH} 3 = Just DNSQClassRelCH
@@ -200,16 +206,17 @@ data DNSQTypeRel : Int -> DNSQType -> Type where
 --  DNSQTypeRelHINFO : DNSQTypeRel 13 DNSQTypeHINFO
 --  DNSQTypeRelMINFO : DNSQTypeRel 14 DNSQTypeMINFO
 
-dnsCodeToType : {ty : DNSType} -> (code : Int) -> Maybe (DNSTypeRel code ty)
-dnsCodeToType {ty = DNSTypeA} 1 = Just DNSTypeRelA
-dnsCodeToType {ty = DNSTypeNS} 2 = Just DNSTypeRelNS
-dnsCodeToType {ty = DNSTypeCNAME} 5 = Just DNSTypeRelCNAME
-dnsCodeToType {ty = DNSTypeNULL} 10 = Just DNSTypeRelNULL
-dnsCodeToType {ty = DNSTypePTR} 12 = Just DNSTypeRelPTR
-dnsCodeToType {ty = DNSTypeMX} 15 = Just DNSTypeRelMX
-dnsCodeToType {ty = DNSTypeTXT} 16 = Just DNSTypeRelTXT
-dnsCodeToType {ty = DNSTypeAAAA} 28 = Just DNSTypeRelAAAA
+dnsCodeToType : (code : Int) -> Maybe DNSType
+dnsCodeToType 1 = Just DNSTypeA
+dnsCodeToType 2 = Just DNSTypeNS
+dnsCodeToType 5 = Just DNSTypeCNAME
+dnsCodeToType 10 = Just DNSTypeNULL
+dnsCodeToType 12 = Just DNSTypePTR
+dnsCodeToType 15 = Just DNSTypeMX
+dnsCodeToType 16 = Just DNSTypeTXT
+dnsCodeToType 28 = Just DNSTypeAAAA
 dnsCodeToType _ = Nothing
+
 --dnsCodeToType {ty = DNSTypeMD} 3 = Just DNSTypeRelMD
 --dnsCodeToType {ty = DNSTypeMF} 4 = Just DNSTypeRelMF
 --dnsCodeToType {ty = DNSTypeSOA} 6 = Just DNSTypeRelSOA
@@ -221,38 +228,53 @@ dnsCodeToType _ = Nothing
 --dnsCodeToType {ty = DNSTypeMINFO} 14 = Just DNSTypeRelMINFO
 
  
-dnsTypeToCode : {code : Int} -> (ty : DNSType) -> DNSTypeRel code ty
-dnsTypeToCode {code = 1} DNSTypeA = DNSTypeRelA
-dnsTypeToCode {code = 2} DNSTypeNS = DNSTypeRelNS
-dnsTypeToCode {code = 5} DNSTypeCNAME = DNSTypeRelCNAME
-dnsTypeToCode {code = 10} DNSTypeNULL = DNSTypeRelNULL
-dnsTypeToCode {code = 12} DNSTypePTR = DNSTypeRelPTR
-dnsTypeToCode {code = 15} DNSTypeMX = DNSTypeRelMX
-dnsTypeToCode {code = 16} DNSTypeTXT = DNSTypeRelTXT
-dnsTypeToCode {code = 28} DNSTypeAAAA = DNSTypeRelAAAA
---dnsTypeToCode {code = 3} DNSTypeMD = DNSTypeRelMD
---dnsTypeToCode {code = 4} DNSTypeMF = DNSTypeRelMF
---dnsTypeToCode {code = 6} DNSTypeSOA = DNSTypeRelSOA
---dnsTypeToCode {code = 7} DNSTypeMB = DNSTypeRelMB
---dnsTypeToCode {code = 8} DNSTypeMG = DNSTypeRelMG
---dnsTypeToCode {code = 9} DNSTypeMR = DNSTypeRelMR
---dnsTypeToCode {code = 11} DNSTypeWKS = DNSTypeRelWKS
---dnsTypeToCode {code = 13} DNSTypeHINFO = DNSTypeRelHINFO
---dnsTypeToCode {code = 14} DNSTypeMINFO = DNSTypeRelMINFO
+dnsTypeRel : (code : Int) -> (ty : DNSType) -> Maybe (DNSTypeRel code ty)
+dnsTypeRel 1 DNSTypeA = Just DNSTypeRelA
+dnsTypeRel 2 DNSTypeNS = Just DNSTypeRelNS
+dnsTypeRel 5 DNSTypeCNAME = Just DNSTypeRelCNAME
+dnsTypeRel 10 DNSTypeNULL = Just DNSTypeRelNULL
+dnsTypeRel 12 DNSTypePTR = Just DNSTypeRelPTR
+dnsTypeRel 15 DNSTypeMX = Just DNSTypeRelMX
+dnsTypeRel 16 DNSTypeTXT = Just DNSTypeRelTXT
+dnsTypeRel 28 DNSTypeAAAA = Just DNSTypeRelAAAA
 
-dnsCodeToQType : {ty : DNSQType} -> (code : Int) -> Maybe (DNSQTypeRel code ty)
-dnsCodeToQType {ty = DNSQTypeA} 1 = Just DNSQTypeRelA
-dnsCodeToQType {ty = DNSQTypeNS} 2 = Just DNSQTypeRelNS
-dnsCodeToQType {ty = DNSQTypeCNAME} 5 = Just DNSQTypeRelCNAME
-dnsCodeToQType {ty = DNSQTypeNULL} 10 = Just DNSQTypeRelNULL
-dnsCodeToQType {ty = DNSQTypePTR} 12 = Just DNSQTypeRelPTR
-dnsCodeToQType {ty = DNSQTypeMX} 15 = Just DNSQTypeRelMX
-dnsCodeToQType {ty = DNSQTypeTXT} 16 = Just DNSQTypeRelTXT
-dnsCodeToQType {ty = DNSQTypeAAAA} 28 = Just DNSQTypeRelAAAA
-dnsCodeToQType {ty = DNSQTypeAXFR} 252 = Just DNSQTypeRelAXFR
-dnsCodeToQType {ty = DNSQTypeMAILB} 253 = Just DNSQTypeRelMAILB
-dnsCodeToQType {ty = DNSQTypeMAILA} 254 = Just DNSQTypeRelMAILA
-dnsCodeToQType {ty = DNSQTypeALL} 255 = Just DNSQTypeRelALL
+--dnsTypeToRel {code = 3} DNSTypeMD = DNSTypeRelMD
+--dnsTypeToRel {code = 4} DNSTypeMF = DNSTypeRelMF
+--dnsTypeToRel {code = 6} DNSTypeSOA = DNSTypeRelSOA
+--dnsTypeToRel {code = 7} DNSTypeMB = DNSTypeRelMB
+--dnsTypeToRel {code = 8} DNSTypeMG = DNSTypeRelMG
+--dnsTypeToRel {code = 9} DNSTypeMR = DNSTypeRelMR
+--dnsTypeToRel {code = 11} DNSTypeWKS = DNSTypeRelWKS
+--dnsTypeToRel {code = 13} DNSTypeHINFO = DNSTypeRelHINFO
+--dnsTypeToRel {code = 14} DNSTypeMINFO = DNSTypeRelMINFO
+dnsCodeToQType : (code : Int) -> Maybe DNSQType
+dnsCodeToQType 1 = Just DNSQTypeA
+dnsCodeToQType 2 = Just DNSQTypeNS
+dnsCodeToQType 5 = Just DNSQTypeCNAME
+dnsCodeToQType 10 = Just DNSQTypeNULL
+dnsCodeToQType 12 = Just DNSQTypePTR
+dnsCodeToQType 15 = Just DNSQTypeMX
+dnsCodeToQType 16 = Just DNSQTypeTXT
+dnsCodeToQType 28 = Just DNSQTypeAAAA
+dnsCodeToQType 252 = Just DNSQTypeAXFR
+dnsCodeToQType 253 = Just DNSQTypeMAILB
+dnsCodeToQType 254 = Just DNSQTypeMAILA
+dnsCodeToQType 255 = Just DNSQTypeALL
+dnsCodeToQType _ = Nothing
+
+dnsQTypeRel : (code : Int) -> (ty : DNSQType) -> Maybe (DNSQTypeRel code ty)
+dnsQTypeRel 1 DNSQTypeA = Just DNSQTypeRelA
+dnsQTypeRel 2 DNSQTypeNS = Just DNSQTypeRelNS
+dnsQTypeRel 5 DNSQTypeCNAME = Just DNSQTypeRelCNAME
+dnsQTypeRel 10 DNSQTypeNULL = Just DNSQTypeRelNULL
+dnsQTypeRel 12 DNSQTypePTR = Just DNSQTypeRelPTR
+dnsQTypeRel 15 DNSQTypeMX = Just DNSQTypeRelMX
+dnsQTypeRel 16 DNSQTypeTXT = Just DNSQTypeRelTXT
+dnsQTypeRel 28 DNSQTypeAAAA = Just DNSQTypeRelAAAA
+dnsQTypeRel 252 DNSQTypeAXFR = Just DNSQTypeRelAXFR
+dnsQTypeRel 253 DNSQTypeMAILB = Just DNSQTypeRelMAILB
+dnsQTypeRel 254 DNSQTypeMAILA = Just DNSQTypeRelMAILA
+dnsQTypeRel 255 DNSQTypeALL = Just DNSQTypeRelALL
 --dnsCodeToQType {ty = DNSQTypeMD} 3 = Just DNSQTypeRelMD
 --dnsCodeToQType {ty = DNSQTypeMF} 4 = Just DNSQTypeRelMF
 --dnsCodeToQType {ty = DNSQTypeSOA} 6 = Just DNSQTypeRelSOA
@@ -263,28 +285,15 @@ dnsCodeToQType {ty = DNSQTypeALL} 255 = Just DNSQTypeRelALL
 --dnsCodeToQType {ty = DNSQTypeHINFO} 13 = Just DNSQTypeRelHINFO
 --dnsCodeToQType {ty = DNSQTypeMINFO} 14 = Just DNSQTypeRelMINFO
 
-dnsQTypeToCode : {code : Int} -> (ty : DNSQType) -> DNSQTypeRel code ty
-dnsQTypeToCode {code = 1} DNSQTypeA = DNSQTypeRelA
-dnsQTypeToCode {code = 2} DNSQTypeNS = DNSQTypeRelNS
-dnsQTypeToCode {code = 5} DNSQTypeCNAME = DNSQTypeRelCNAME
-dnsQTypeToCode {code = 10} DNSQTypeNULL = DNSQTypeRelNULL
-dnsQTypeToCode {code = 12} DNSQTypePTR = DNSQTypeRelPTR
-dnsQTypeToCode {code = 15} DNSQTypeMX = DNSQTypeRelMX
-dnsQTypeToCode {code = 16} DNSQTypeTXT = DNSQTypeRelTXT
-dnsQTypeToCode {code = 28} DNSQTypeAAAA = DNSQTypeRelAAAA
-dnsQTypeToCode {code = 252} DNSQTypeAXFR = DNSQTypeRelAXFR
-dnsQTypeToCode {code = 253} DNSQTypeMAILB = DNSQTypeRelMAILB 
-dnsQTypeToCode {code = 254} DNSQTypeMAILA = DNSQTypeRelMAILA 
-dnsQTypeToCode {code = 255} DNSQTypeALL = DNSQTypeRelALL
---dnsQTypeToCode {code = 3} DNSQTypeMD = DNSQTypeRelMD
---dnsQTypeToCode {code = 4} DNSQTypeMF = DNSQTypeRelMF
---dnsQTypeToCode {code = 6} DNSQTypeSOA = DNSQTypeRelSOA
---dnsQTypeToCode {code = 7} DNSQTypeMB = DNSQTypeRelMB
---dnsQTypeToCode {code = 8} DNSQTypeMG = DNSQTypeRelMG
---dnsQTypeToCode {code = 9} DNSQTypeMR = DNSQTypeRelMR
---dnsQTypeToCode {code = 11} DNSQTypeWKS = DNSQTypeRelWKS
---dnsQTypeToCode {code = 13} DNSQTypeHINFO = DNSQTypeRelHINFO
---dnsQTypeToCode {code = 14} DNSQTypeMINFO = DNSQTypeRelMINFO
+--dnsQTypeToRel {code = 3} DNSQTypeMD = DNSQTypeRelMD
+--dnsQTypeToRel {code = 4} DNSQTypeMF = DNSQTypeRelMF
+--dnsQTypeToRel {code = 6} DNSQTypeSOA = DNSQTypeRelSOA
+--dnsQTypeToRel {code = 7} DNSQTypeMB = DNSQTypeRelMB
+--dnsQTypeToRel {code = 8} DNSQTypeMG = DNSQTypeRelMG
+--dnsQTypeToRel {code = 9} DNSQTypeMR = DNSQTypeRelMR
+--dnsQTypeToRel {code = 11} DNSQTypeWKS = DNSQTypeRelWKS
+--dnsQTypeToRel {code = 13} DNSQTypeHINFO = DNSQTypeRelHINFO
+--dnsQTypeToRel {code = 14} DNSQTypeMINFO = DNSQTypeRelMINFO
 
 data DNSResponse = DNSResponseNoError
                  | DNSResponseFormatError
@@ -293,30 +302,14 @@ data DNSResponse = DNSResponseNoError
                  | DNSResponseNotImplementedError
                  | DNSResponseRefusedError
 
-data DNSResponseRel : Int -> DNSResponse -> Type where
-  DNSResponseRelNoErr : DNSResponseRel 0 DNSResponseNoError
-  DNSResponseRelFormatErr : DNSResponseRel 1 DNSResponseFormatError 
-  DNSResponseRelServerErr : DNSResponseRel 2 DNSResponseServerError
-  DNSResponseRelNameErr : DNSResponseRel 3 DNSResponseNameError
-  DNSResponseRelNotImplErr : DNSResponseRel 4 DNSResponseNotImplementedError
-  DNSResponseRelRefusedErr : DNSResponseRel 5 DNSResponseRefusedError
-
-dnsResponseToCode : {code : Int} -> (ty : DNSResponse) -> DNSResponseRel code ty
-dnsResponseToCode {code = 0} DNSResponseNoError = DNSResponseRelNoErr
-dnsResponseToCode {code = 1} DNSResponseFormatError = DNSResponseRelFormatErr
-dnsResponseToCode {code = 2} DNSResponseServerError = DNSResponseRelServerErr
-dnsResponseToCode {code = 3} DNSResponseNameError = DNSResponseRelNameErr
-dnsResponseToCode {code = 4} DNSResponseNotImplementedError = DNSResponseRelNotImplErr
-dnsResponseToCode {code = 5} DNSResponseRefusedError = DNSResponseRelRefusedErr
-
-dnsCodeToResponse : (code : Int) -> DNSResponseRel code ty
-dnsCodeToResponse {ty = DNSResponseNoError} 0 = DNSResponseRelNoErr
-dnsCodeToResponse {ty = DNSResponseFormatError} 1 = DNSResponseRelFormatErr
-dnsCodeToResponse {ty = DNSResponseServerError} 2 = DNSResponseRelServerErr
-dnsCodeToResponse {ty = DNSResponseNameError} 3 = DNSResponseRelNameErr
-dnsCodeToResponse {ty = DNSResponseNotImplementedError} 4 = DNSResponseRelNotImplErr
-dnsCodeToResponse {ty = DNSResponseRefusedError} 5 = DNSResponseRelRefusedErr
-
+dnsCodeToResponse : (code : Int) -> Maybe DNSResponse
+dnsCodeToResponse 0 = Just DNSResponseNoError
+dnsCodeToResponse 1 = Just DNSResponseFormatError
+dnsCodeToResponse 2 = Just DNSResponseServerError
+dnsCodeToResponse 3 = Just DNSResponseNameError
+dnsCodeToResponse 4 = Just DNSResponseNotImplementedError
+dnsCodeToResponse 5 = Just DNSResponseRefusedError
+dnsCodeToResponse _ = Nothing
 
 
 DomainFragment : Type
@@ -341,16 +334,26 @@ data DNSPayloadRel : DNSType -> DNSClass -> DNSPayloadType -> Type where
   DNSPayloadRelCNAME : DNSPayloadRel DNSTypeCNAME DNSClassIN DNSDomain
   DNSPayloadRelNS : DNSPayloadRel DNSTypeNS DNSClassIN DNSDomain
 
-getPayloadRel : {pl_ty : DNSPayloadType} ->
+getPayloadRel : (pl_ty : DNSPayloadType) ->
               (ty : DNSType) -> 
               (cls : DNSClass) -> 
               Maybe (DNSPayloadRel ty cls pl_ty)
-getPayloadRel {pl_ty = DNSIPv4} DNSTypeA DNSClassIN = Just DNSPayloadRelIP
-getPayloadRel {pl_ty = DNSIPv6} DNSTypeAAAA DNSClassIN = Just DNSPayloadRelIP6
-getPayloadRel {pl_ty = DNSDomain} DNSTypeCNAME DNSClassIN = Just DNSPayloadRelCNAME
-getPayloadRel {pl_ty = DNSDomain} DNSTypeNS DNSClassIN = Just DNSPayloadRelNS
-getPayloadRel _ _ = Nothing
+getPayloadRel DNSIPv4 DNSTypeA DNSClassIN = Just DNSPayloadRelIP
+getPayloadRel DNSIPv6 DNSTypeAAAA DNSClassIN = Just DNSPayloadRelIP6
+getPayloadRel DNSDomain DNSTypeCNAME DNSClassIN = Just DNSPayloadRelCNAME
+getPayloadRel DNSDomain DNSTypeNS DNSClassIN = Just DNSPayloadRelNS
+getPayloadRel _ _ _ = Nothing
 
+
+payloadType : DNSType -> DNSClass -> Maybe DNSPayloadType
+payloadType DNSTypeA DNSClassIN = Just DNSIPv4
+payloadType DNSTypeAAAA DNSClassIN = Just DNSIPv6
+payloadType DNSTypeNS DNSClassIN =  Just DNSDomain
+payloadType DNSTypeCNAME DNSClassIN = Just DNSDomain
+payloadType _ _ = Nothing
+
+
+{-
 getPayloadRel' : (ty_rel : DNSTypeRel ty_code ty) ->
                  (cls_rel : DNSClassRel cls_code cls) ->
                  Maybe (DNSPayloadRel ty cls pl_ty)
@@ -359,6 +362,7 @@ getPayloadRel' {pl_ty = DNSDomain} DNSTypeRelNS DNSClassRelIN = Just DNSPayloadR
 getPayloadRel' {pl_ty = DNSDomain} DNSTypeRelCNAME DNSClassRelIN = Just DNSPayloadRelCNAME
 getPayloadRel' {pl_ty = DNSIPv6} DNSTypeRelAAAA DNSClassRelIN = Just DNSPayloadRelIP6
 getPayloadRel' _ _ = Nothing
+-}
 {-
 getPayloadRel' DNSTypeRelNULL cls_rel = ?mv_4
 getPayloadRel' DNSTypeRelPTR cls_rel = ?mv_5
@@ -373,7 +377,6 @@ payloadType NS IN = DNSPayload DNSDomain
 payloadType CNAME IN = DNSPayload DNSDomain
 payloadType _ _ = DNSPayload DNSUnimplementedPayload
 -}
-
 
 -- payloadType q
 
