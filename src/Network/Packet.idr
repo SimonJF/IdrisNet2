@@ -22,38 +22,37 @@ ByteData : Type
 ByteData = Int
 
 public
-data RawPacket = RawPckt Ptr
 data ActivePacket : Type where
-  ActivePacketRes : RawPacket -> BytePos -> Length -> ActivePacket
+  ActivePacketRes : BufPtr -> BytePos -> Length -> ActivePacket
 
 public
-dumpPacket : RawPacket -> Length -> IO ()
-dumpPacket (RawPckt pckt) len =
+dumpPacket : BufPtr -> Length -> IO ()
+dumpPacket (BPtr pckt) len =
   mkForeign (FFun "dumpPacket" [FPtr, FInt] FUnit) pckt len
 
 
 {- Internal FFI Functions -}
-foreignCreatePacket : Int -> IO RawPacket
-foreignCreatePacket len = map RawPckt $ mkForeign (FFun "newPacket" [FInt] FPtr) len
+foreignCreatePacket : Int -> IO BufPtr
+foreignCreatePacket len = map BPtr $ mkForeign (FFun "newPacket" [FInt] FPtr) len
 
-foreignSetByte : RawPacket -> Position -> ByteData -> IO ()
-foreignSetByte (RawPckt pckt) dat pos = 
+foreignSetByte : BufPtr -> Position -> ByteData -> IO ()
+foreignSetByte (BPtr pckt) dat pos = 
   mkForeign (FFun "setPacketByte" [FPtr, FInt, FInt] FUnit) pckt dat pos
 
-foreignSetBits : RawPacket -> Position -> Position -> ByteData -> IO ()
-foreignSetBits (RawPckt pckt) start end dat = 
+foreignSetBits : BufPtr -> Position -> Position -> ByteData -> IO ()
+foreignSetBits (BPtr pckt) start end dat = 
   mkForeign (FFun "setPacketBits" [FPtr, FInt, FInt, FInt] FUnit) pckt start end dat
 
-foreignSetString : RawPacket -> Position -> String -> Int -> Char -> IO ()
-foreignSetString (RawPckt pckt) start dat len term =
+foreignSetString : BufPtr -> Position -> String -> Int -> Char -> IO ()
+foreignSetString (BPtr pckt) start dat len term =
   mkForeign (FFun "setPacketString" [FPtr, FInt, FString, FInt, FChar] FUnit) pckt start dat len term
 
-foreignGetByte : RawPacket -> Position -> IO ByteData
-foreignGetByte (RawPckt pckt) pos = 
+foreignGetByte : BufPtr -> Position -> IO ByteData
+foreignGetByte (BPtr pckt) pos = 
   mkForeign (FFun "getPacketByte" [FPtr, FInt] FInt) pckt pos
 
-foreignGetBits : RawPacket -> Position -> Position -> IO ByteData
-foreignGetBits (RawPckt pckt) start end =
+foreignGetBits : BufPtr -> Position -> Position -> IO ByteData
+foreignGetBits (BPtr pckt) start end =
   mkForeign (FFun "getPacketBits" [FPtr, FInt, FInt] FInt) pckt start end
 
 {- Marshalling -}
@@ -277,10 +276,10 @@ unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
 
 
 {- Publicly-Facing Functions... -}
--- | Given a packet language and a packet, creates a RawPacket that
+-- | Given a packet language and a packet, creates a BufPtr that
 -- | may be sent over the network by a UDP or TCP socket
 public
-marshal : (pl : PacketLang) -> (mkTy pl) -> IO (RawPacket, Length)
+marshal : (pl : PacketLang) -> (mkTy pl) -> IO (BufPtr, Length)
 marshal pl dat = do
   let pckt_len = bitLength pl dat
   pckt <- foreignCreatePacket pckt_len
@@ -289,10 +288,10 @@ marshal pl dat = do
   --dumpPacket pckt 1024
   return (pckt, len)
 
--- | Given a packet language and a RawPacket, unmarshals the packet
+-- | Given a packet language and a BufPtr, unmarshals the packet
 public 
 unmarshal : (pl : PacketLang) -> 
-            RawPacket -> 
+            BufPtr -> 
             Length -> 
             IO (Maybe (mkTy pl, ByteLength))
 unmarshal pl pckt len = do
@@ -301,9 +300,9 @@ unmarshal pl pckt len = do
   return $ (unmarshal' (ActivePacketRes pckt 0 len) pl) 
   
 
--- | Destroys a RawPacket
+-- | Destroys a BufPtr
 public
-freePacket : RawPacket -> IO ()
-freePacket (RawPckt pckt) = mkForeign (FFun "freePacket" [FPtr] FUnit) pckt
+freePacket : BufPtr -> IO ()
+freePacket (BPtr pckt) = mkForeign (FFun "freePacket" [FPtr] FUnit) pckt
 
 

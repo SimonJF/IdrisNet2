@@ -144,8 +144,7 @@ instance Handler TCPServerClient IO where
 
   handle (CC sock addr) (WritePacket pl dat) k = do
     (pckt, len) <- marshal pl dat
-    let (RawPckt pckt') = pckt
-    send_res <- sendBuf sock pckt' len
+    send_res <- sendBuf sock pckt len
     case send_res of
          Left err => 
           if err == EAGAIN then
@@ -155,7 +154,7 @@ instance Handler TCPServerClient IO where
          Right bl => k (OperationSuccess bl) (CC sock addr)
 
   handle (CC sock addr) (ReadPacket pl len) k = do
-    ptr <- alloc len
+    ptr <- sock_alloc len
     recv_res <- recvBuf sock ptr len
     case recv_res of
          Left err =>
@@ -166,8 +165,8 @@ instance Handler TCPServerClient IO where
            else
              k (FatalError err) (CE sock)
          Right bl => do
-           res <- unmarshal pl (RawPckt ptr) bl
-           free ptr
+           res <- unmarshal pl ptr bl
+           sock_free ptr
            -- The OperationSuccess depends on the actual network-y
            -- part, not the unmarshalling. If the unmarshalling fails,
            -- we still keep the connection open.
