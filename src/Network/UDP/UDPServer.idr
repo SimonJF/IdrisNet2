@@ -58,6 +58,11 @@ data UDPServer : Effect where
                    { UDPBound ==> interpUDPOperationRes result}
                    UDPServer (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength)))
 
+  UDPSReadPacketBuf : (pl : PacketLang) ->
+                   Length -> -- As with other occurrences, ideally this would go
+                   { UDPBound ==> interpUDPOperationRes result}
+                   UDPServer (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength, BufPtr)))
+
   UDPSFinalise : { UDPError ==> () } UDPServer ()
 
 
@@ -98,6 +103,12 @@ udpReadPacket : (pl : PacketLang) ->
                 { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
                 Eff IO (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength))) 
 udpReadPacket pl len = (UDPSReadPacket pl len)
+
+udpReadPacket' : (pl : PacketLang) ->
+                Length ->
+                { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
+                Eff IO (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength, BufPtr))) 
+udpReadPacket' pl len = (UDPSReadPacketBuf pl len)
 
 udpFinalise : { [UDPSERVER UDPError] ==> [UDPSERVER ()]} Eff IO ()
 udpFinalise = UDPSFinalise
@@ -170,4 +181,23 @@ instance Handler UDPServer IO where
            -- part, not the unmarshalling. If the unmarshalling fails,
            -- we still keep the connection open.
            k (UDPSuccess (addr, res)) (UDPB sock) 
+
+  handle (UDPB sock) (UDPSReadPacketBuf pl len) k = do
+    ptr <- sock_alloc len
+    recv_res <- recvFromBuf sock ptr len
+    case recv_res of
+         Left err =>
+           if err == EAGAIN then
+             k (UDPRecoverableError err) (UDPB sock)
+           else
+             k (UDPFailure err) (UDPE sock)
+         Right (addr, bl) => do
+           res <- unmarshal pl ptr bl
+           case res of 
+             Just (pckt', bl') => do
+               k (UDPSuccess (addr, Just (pckt', bl', ptr))) (UDPB sock)
+             Nothing => sock_free ptr $> k (UDPSuccess (addr, Nothing)) (UDPB sock)
+           -- The UDPSuccess depends on the actual network-y
+           -- part, not the unmarshalling. If the unmarshalling fails,
+           -- we still keep the connection open.
 

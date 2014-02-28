@@ -26,6 +26,14 @@ data DNSQuestion : Type where
                   (dnsQQClass : DNSQClass) ->
                   DNSQuestion
 
+instance Show DNSQuestion where
+  show (MkDNSQuestion qns qqt qqc) =
+    "DNS Question: \n" ++ 
+    "DNS QNames: \n" ++ (show qns) ++ "\n" ++
+    "DNS QType: \n" ++ (show qqt) ++ "\n" ++
+    "DNS QClass: \n" ++ (show qqc) ++ "\n"
+
+
 data DNSRecord : Type where
   MkDNSRecord : (dnsRRName : List DomainFragment) ->
                 (dnsRRType : DNSType) ->
@@ -35,7 +43,13 @@ data DNSRecord : Type where
                 (dnsRRPayload : DNSPayload pl_ty) ->
                 DNSRecord
 
-
+instance Show DNSRecord where
+  show (MkDNSRecord name ty cls ttl rel pl) = "DNS Record: \n" ++
+    "DNS RR Name: " ++ (show name) ++ "\n" ++
+    "DNS RR Type: " ++ (show ty) ++ "\n" ++
+    "DNS RR Class: " ++ (show cls) ++ "\n" ++
+    "DNS RR TTL: " ++ (show ttl) ++ "\n" ++
+    "DNS RR Payload: " ++ (showPayload rel pl) ++ "\n"
 
 record DNSHeader : Type where
   MkDNSHeader : (dnsHdrId : Int) ->
@@ -45,8 +59,25 @@ record DNSHeader : Type where
                 (dnsHdrIsTruncated : Bool) ->
                 (dnsHdrRecursionDesired : Bool) ->
                 (dnsHdrRecursionAvailable : Bool) ->
+                (dnsAnswerAuthenticated : Bool) ->
+                (dnsNonAuthAcceptable : Bool) ->
                 (dnsHdrResponse : DNSResponse) ->
                 DNSHeader
+
+instance Show DNSHeader where
+  show (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) = 
+    "DNS Header\n" ++ 
+    "ID : " ++ (show hdr_id) ++ "\n" ++ 
+    "Is query? : " ++ (show query) ++ "\n" ++ 
+    "Opcode : " ++ (show op) ++ "\n" ++ 
+    "Is authority? : " ++ (show auth) ++ "\n" ++ 
+    "Is truncated? : " ++ (show trunc) ++ "\n" ++
+    "Is recursion desired? : " ++ (show rd) ++ "\n" ++
+    "Is recursion available? : " ++ (show ra) ++ "\n" ++
+    "Is answer authenticated? : " ++ (show aa) ++ "\n" ++
+    "Is non-authenticated data acceptable? : " ++ (show naa) ++ "\n" ++
+    "Response : " ++ (show resp) ++ "\n"
+    
 
 record DNSPacket : Type where
   MkDNS : (dnsPcktHeader : DNSHeader) -> 
@@ -59,6 +90,24 @@ record DNSPacket : Type where
           (dnsPcktAuthorities : Vect dnsPcktNSCount DNSRecord) ->
           (dnsPcktAdditionals : Vect dnsPcktARCount DNSRecord) ->
           DNSPacket
+
+instance Show DNSPacket where
+  show (MkDNS hdr qdc anc nsc arc qs as auths adds) = 
+    "DNS Packet: " ++ "\n" ++
+    "QD Count: " ++ (show qdc) ++ "\n" ++
+    "AN Count: " ++ (show anc) ++ "\n" ++
+    "NS Count: " ++ (show nsc) ++ "\n" ++
+    "AR Count: " ++ (show arc) ++ "\n" ++
+    "Questions: " ++ (show qs) ++ "\n" ++
+    "Answers: " ++ (show as) ++ "\n" ++
+    "Authorities: " ++ (show auths) ++ "\n" ++
+    "Additionals: " ++ (show adds) ++ "\n"
+  
+
+--instance Show DNSPacket where
+  --show (MkDNS hdr qd an ns ar qs as auths adds) = 
+    -- "DNS Packet: \n" ++
+    
 -- Verified implementation of the DNS packet specification
 
 -- Validation of TYPE and QTYPE fields
@@ -103,7 +152,7 @@ dnsReference = do tagCheck 1
                   bits 14
 
  --                 check (((val tag1) == 1) && ((val tag2) == 1))
-
+-- nullterm or...
 dnsLabel : PacketLang
 dnsLabel = do tagCheck 0
               len <- bits 6
@@ -162,6 +211,8 @@ dnsHeader =
      ra <- bool -- Recursion available; is support available in NS?
      z  <- bool -- Must be 0.
      check (not z)
+     ans_auth <- bool
+     auth_acceptable <- bool
      resp <- bits 4 -- Response code, only 0-5 valid
      check (validRespCode (val resp))
 

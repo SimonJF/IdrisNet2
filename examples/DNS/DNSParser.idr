@@ -8,27 +8,47 @@ import Effect.State
 DNSReference : Type
 DNSReference = Int
 
+public
 data DNSParseError = NonexistentRef Int -- Bad reference
                    | BadCode -- Error decoding something from an int to a datatype
                    | InternalError String -- Something else
                    | PayloadUnimplemented
+
+instance Show DNSParseError where
+  show (NonexistentRef i) = "Bad reference: " ++ show i
+  show BadCode = "Bad code"
+  show (InternalError s) = "Internal error: " ++ s
+  show PayloadUnimplemented = "Payload unimplemented"
+
+public
 record DNSState : Type where
-  MkDNSState : (blob : RawPacket) ->
+  MkDNSState : (blob : BufPtr) ->
                (labelCache : List (Position, List DomainFragment)) ->
                (pcktLen : Length) ->
                DNSState
 
-
+public
 data DNSParser : Effect where
-  ParseDNSPacket : (mkTy dns) -> Length -> { DNSState } DNSParser (Either DNSParseError DNSPacket)
-  EncodeDNSPacket : DNSPacket -> { DNSState } DNSParser (mkTy dns)
+  Initialise : BufPtr -> Length -> { () ==> DNSState } DNSParser ()
+  Finalise : { DNSState ==> () } DNSParser ()
+  ParseDNSPacket : (mkTy dns) -> { DNSState ==> () } DNSParser (Either DNSParseError DNSPacket)
+  EncodeDNSPacket : DNSPacket -> { DNSState ==> () } DNSParser (mkTy dns)
   UpdateDNSState : DNSState -> { DNSState } DNSParser ()
   GetDNSState : { DNSState } DNSParser DNSState
   UnmarshalReference : DNSReference -> { DNSState } DNSParser (Maybe (List DomainFragment))
 
+public
 DNSPARSER : Type -> EFFECT
 DNSPARSER t = MkEff t DNSParser
 
+
+
+{-
+parseDNSPacket : Applicative m =>
+                 (mkTy dns) ->  
+                 { [DNSPARSER DNSState] } 
+                   Eff m (Either DNSParseError DNSPacket)
+-}
 
 packAndMap : Vect n (Bounded 8) -> String
 packAndMap xs = pack $ map (chr . val) xs
@@ -36,7 +56,7 @@ packAndMap xs = pack $ map (chr . val) xs
 unmarshalLabel : (mkTy dnsLabel) -> DomainFragment
 unmarshalLabel (tagc ## len ## prf ## xs) = packAndMap xs
 
-unmarshalReference' : RawPacket -> 
+unmarshalReference' : BufPtr -> 
                       Position -> 
                       Length -> 
                       IO (Maybe (List DomainFragment))
@@ -51,8 +71,13 @@ unmarshalReference' pckt pos p_len = do
 
 instance Handler DNSParser IO where
   handle st (UnmarshalReference ref) k = do
+    putStrLn $ "Unmarshalling reference: " ++ (show ref)
     res <- unmarshalReference' (blob st) (pcktLen st) ref
     k res st
+  handle _ (Initialise ptr len) k = k () (MkDNSState ptr [] len)
+  handle _ (Finalise) k = k () ()
+  handle st (GetDNSState) k = k st st
+  handle st (UpdateDNSState st') k = k () st'
 
 private
 getDNSState : { [DNSPARSER DNSState] } Eff m DNSState
@@ -69,10 +94,10 @@ unmarshalReference ref = UnmarshalReference ref
 
 parseDNSHeader : (mkTy dnsHeader) -> Maybe DNSHeader
 parseDNSHeader (ident ## qr ## opcode ## opcode_prf ## aa ## tc ## rd ## 
-                ra ## z ## z_prf ## resp ## resp_prf) = do
+                ra ## z ## z_prf ## ans_auth ## nonauth_accept ## resp ## resp_prf) = do
   op <- codeToDNSOpcode $ (val opcode)
   resp' <- dnsCodeToResponse $ (val resp)
-  return $ MkDNSHeader (val ident) qr op aa tc rd ra resp'
+  return $ MkDNSHeader (val ident) qr op aa tc rd ra ans_auth nonauth_accept resp'
   
 
 decodeReference : DNSReference -> { [DNSPARSER DNSState] } 
@@ -104,13 +129,12 @@ decodeDomain (Left (_ ## ref)) = decodeReference (val ref)
 decodeDomain (Right encoded_lbls) = decodeLabels encoded_lbls
 
 parseDNSQuestion : (mkTy dnsQuestion) -> { [DNSPARSER DNSState] } Eff m (Maybe DNSQuestion)
-parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = ?mv
-{- do
+parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = do
   decoded_domain <- decodeDomain encoded_domain
-  case (decoded_domain, codeToDNSQType (val qt), codeToDNSQClass (val qc)) of
+  case (decoded_domain, dnsCodeToQType (val qt), dnsCodeToQClass (val qc)) of
     (Right domain', Just qt', Just qc') => return $ Just (MkDNSQuestion domain' qt' qc')
     _ => return Nothing
--}
+
 
 decodeIP : (mkTy dnsIP) -> SocketAddress
 decodeIP (i1 ## i2 ## i3 ## i4) = 
@@ -239,8 +263,25 @@ parseDNSPacket (hdr ## qdcount ## ancount ## nscount ##
     -- Nothing = bad code
     _ => return $ Left BadCode
 
+--encodeDNSPacket : DNSPacket -> { [DNSPARSER DNSState] } Eff m (mkTy dns)
+--encodeDNSPacket dnspckt = ?encodeDNSPacket_rhs
 
-encodeDNSPacket : DNSPacket -> { [DNSPARSER DNSState] } Eff m (mkTy dns)
-encodeDNSPacket dnspckt = ?encodeDNSPacket_rhs
+initialise : BufPtr -> Length -> { [DNSPARSER ()] ==> [DNSPARSER DNSState] } Eff IO ()
+initialise ptr len = Initialise ptr len
+
+finalise : { [DNSPARSER DNSState] ==> [DNSPARSER ()] } Eff IO ()
+finalise = Finalise
+
+public
+parseDNS : BufPtr -> Length -> (mkTy dns) -> 
+           { [DNSPARSER ()] } Eff IO (Either DNSParseError DNSPacket)
+parseDNS ptr len pckt = do
+  initialise ptr len
+  res <- parseDNSPacket pckt
+  finalise
+  return res
+
+
+-- runInit [(MkDNSState ptr [] len)] (parseDNSPacket pckt)
 
 

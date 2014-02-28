@@ -6,16 +6,16 @@ import Network.Socket
 {- A module specifying the relations between codes and higher-level
  - data types. There is nothing of remotely any interest in here. 
 
-- TODO: As nice as it would be, the whole "make me a relation with an implicit" thing 
-- doesn't work. Firstly, we'll have to decode to get a DNSType / DNSClass, *then*
-- match, using both the code and type, to get the relation.
-
-- Makes the code a tad uglier, but *should* work, Lord Helix permitting.
-
 -}
 -- %default total
 
 data DNSHdrOpcode = QUERY | IQUERY | STATUS
+
+instance Show DNSHdrOpcode where
+  show QUERY = "QUERY"
+  show IQUERY = "IQUERY"
+  show STATUS = "STATUS"
+  
 
 {-
 data DNSHdrOpcodeRel : Int -> DNSHdrOpcode -> Type where
@@ -44,6 +44,10 @@ data DNSClass = DNSClassIN -- Internet
               | DNSClassCH -- CHAOS
               | DNSClassHS -- Hesiod
 -}
+
+instance Show DNSClass where
+  show DNSClassIN = "IN"
+
 data DNSClassRel : Int -> DNSClass -> Type where
   DNSClassRelIN : DNSClassRel 1 DNSClassIN
 {-
@@ -71,34 +75,24 @@ dnsCodeToClass {cls = DNSClassHS} 4 = Just DNSClassRelHS
 
 data DNSQClass = DNSQClassIN -- Internet
                | DNSQClassANY -- Any class
-  -- None of the following are used, anyway...
-{-
-              | DNSQClassCS  -- CSNET
-              | DNSQClassCH -- CHAOS
-              | DNSQClassHS -- Hesiod
--}
-data DNSQClassRel : Int -> DNSQClass -> Type where
-  DNSQClassRelIN : DNSQClassRel 1 DNSQClassIN
-  DNSQClassRelANY : DNSQClassRel 255 DNSQClassANY
---  DNSQClassRelCS : DNSQClassRel 2 DNSQClassCS
---  DNSQClassRelCH : DNSQClassRel 3 DNSQClassCH
---  DNSQClassRelHS : DNSQClassRel 4 DNSQClassHS
+               | DNSQClassCS  -- CSNET
+               | DNSQClassCH -- CHAOS
+               | DNSQClassHS -- Hesiod
 
-dnsQClassRel : (code : Int) -> (cls : DNSQClass) -> Maybe (DNSQClassRel code cls)
-dnsQClassRel 1 DNSQClassIN = Just DNSQClassRelIN
-dnsQClassRel 255 DNSQClassANY = Just DNSQClassRelANY
-dnsQClassRel _ _ = Nothing
---dnsQClassToRel {code = 2} DNSQClassCS = DNSQClassRelCS
---dnsQClassToRel {code = 3} DNSQClassCH = DNSQClassRelCH
---dnsQClassToRel {code = 4} DNSQClassHS = DNSQClassRelHS
+instance Show DNSQClass where
+  show DNSQClassIN = "IN"
+  show DNSQClassANY = "ANY"
+  show DNSQClassCS = "CS"
+  show DNSQClassCH = "CH"
+  show DNSQClassHS = "HS"
 
 dnsCodeToQClass : (code : Int) -> Maybe DNSQClass
 dnsCodeToQClass 1 = Just DNSQClassIN
+dnsCodeToQClass 2 = Just DNSQClassCS
+dnsCodeToQClass 3 = Just DNSQClassCH
+dnsCodeToQClass 4 = Just DNSQClassHS
 dnsCodeToQClass 255 = Just DNSQClassANY
 dnsCodeToQClass _ = Nothing
---dnsCodeToQClass {cls = DNSQClassCS} 2 = Just DNSQClassRelCS
---dnsCodeToQClass {cls = DNSQClassCH} 3 = Just DNSQClassRelCH
---dnsCodeToQClass {cls = DNSQClassHS} 4 = Just DNSQClassRelHS
 
 -- A few constants... Might change this
 A_VAL : Int
@@ -136,6 +130,17 @@ data DNSType = DNSTypeA -- A host address
              | DNSTypeTXT -- Text record
              | DNSTypeAAAA -- IPv6 Host Address
 
+
+instance Show DNSType where
+  show DNSTypeA = "A"
+  show DNSTypeNS = "NA"
+  show DNSTypeCNAME = "CNAME"
+  show DNSTypeNULL = "NULL"
+  show DNSTypePTR = "MX"
+  show DNSTypeTXT = "TXT"
+  show DNSTypeAAAA = "AAAA"
+
+
 -- Question types
 data DNSQType = DNSQTypeAXFR -- Request for transfer of entire zone
               | DNSQTypeMAILB -- Request for mailbox-related records
@@ -149,6 +154,20 @@ data DNSQType = DNSQTypeAXFR -- Request for transfer of entire zone
               | DNSQTypeMX -- Mail exchange
               | DNSQTypeTXT -- Text record
               | DNSQTypeAAAA -- IPv6 Host Address
+
+
+instance Show DNSQType where
+  show DNSQTypeAXFR = "AXFR"
+  show DNSQTypeMAILA = "MAILA"
+  show DNSQTypeMAILB = "MAILB"
+  show DNSQTypeALL = "ALL"
+  show DNSQTypeA = "A"
+  show DNSQTypeNS = "NA"
+  show DNSQTypeCNAME = "CNAME"
+  show DNSQTypeNULL = "NULL"
+  show DNSQTypePTR = "MX"
+  show DNSQTypeTXT = "TXT"
+  show DNSQTypeAAAA = "AAAA"
 
 -- stop parsing comments 
             -- s | DNSQTypeMD -- A mail destination (obsolete, use MX)
@@ -302,6 +321,15 @@ data DNSResponse = DNSResponseNoError
                  | DNSResponseNotImplementedError
                  | DNSResponseRefusedError
 
+
+instance Show DNSResponse where
+  show DNSResponseNoError = "No error"
+  show DNSResponseFormatError = "Format error"
+  show DNSResponseServerError = "Server error"
+  show DNSResponseNameError = "Name error"
+  show DNSResponseNotImplementedError = "Not implemented error"
+  show DNSResponseRefusedError = "Refused error"
+
 dnsCodeToResponse : (code : Int) -> Maybe DNSResponse
 dnsCodeToResponse 0 = Just DNSResponseNoError
 dnsCodeToResponse 1 = Just DNSResponseFormatError
@@ -333,6 +361,14 @@ data DNSPayloadRel : DNSType -> DNSClass -> DNSPayloadType -> Type where
   DNSPayloadRelIP6 : DNSPayloadRel DNSTypeAAAA DNSClassIN DNSIPv6
   DNSPayloadRelCNAME : DNSPayloadRel DNSTypeCNAME DNSClassIN DNSDomain
   DNSPayloadRelNS : DNSPayloadRel DNSTypeNS DNSClassIN DNSDomain
+
+
+showPayload : (DNSPayloadRel rrt rrc pl_ty) -> DNSPayload pl_ty -> String
+showPayload DNSPayloadRelIP (DNSIPv4Payload addr) = "IPv4: " ++ (show addr)
+showPayload DNSPayloadRelIP6 (DNSIPv6Payload addr) = "IPv6 " ++ (show addr)
+showPayload DNSPayloadRelCNAME (DNSDomainPayload dom) = "Domain: " ++ show dom
+showPayload DNSPayloadRelNS (DNSDomainPayload dom) = "Domain: " ++ show dom
+
 
 getPayloadRel : (pl_ty : DNSPayloadType) ->
               (ty : DNSType) -> 

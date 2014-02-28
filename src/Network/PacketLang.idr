@@ -50,7 +50,7 @@ fits x bits = ((log2 x_nat) + 1) < ((log2 b_nat) + 1)
 data Bounded : Int -> Type where
 -- TODO: The so proof should be a proof that x fits into i bits
   --BInt : (x : Int) -> (prf : Fits x i) -> Bounded i
-  BInt : (x : Int) -> (prf : so (x < i)) -> Bounded i
+  BInt : (x : Int) -> (prf : so (x < (pow 2 (cast i)))) -> Bounded i
 
 instance Show (Bounded i) where
   show (BInt x _) = show x

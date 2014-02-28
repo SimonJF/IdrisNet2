@@ -152,7 +152,7 @@ unmarshalCString (ActivePacketRes pckt pos p_len) = do
   res <- unmarshalCString' (ActivePacketRes pckt pos p_len) 0
   case res of 
        Just (chrs, len) => return $ Just (pack chrs, len) 
-       Nothing => return Nothing
+       Nothing => putStrLn "unmarshal C string failed" $> return Nothing
 
 -- TODO: Maybe recurse using Nat instead of Int (for sake of totality) but we need to use as an Int
 unmarshalLString' : ActivePacket -> Int -> IO (List Char)
@@ -172,33 +172,38 @@ unmarshalBits : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
 unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + width) <= p_len)
   | True = do
     res <- foreignGetBits pckt pos (pos + width - 1)
+    putStrLn $ "Read: " ++ show res
     return $ Just $ (BInt res (believe_me oh), width) -- Have to trust it, as it's from C
-  | False = return Nothing
+  | False = putStrLn "Check failed in unmarshalBits" $> return Nothing
 
 unmarshalBool : ActivePacket -> IO (Maybe (Bool, Length))
 unmarshalBool (ActivePacketRes pckt pos p_len) with ((pos + 1) <= p_len)
   | True = do
       res <- foreignGetBits pckt pos pos
-      return (Just (res == 1, 1))
-  | False = return Nothing
+      let result = (res == 1)
+      putStrLn $ "Read bool: " ++ show result
+      return $ Just (result, 1)
+  | False = putStrLn "Unmarshal bool failed" $> return Nothing
 
 unmarshalProp : (p : Proposition) -> Maybe (propTy p)
 unmarshalProp (P_EQ x y) = 
   case decEq x y of
     (Yes p) => Just p
-    (No p) => Nothing
+    (No p) => unsafePerformIO $ putStrLn "decEq failed" >>= (\_ => return Nothing)
 unmarshalProp (P_BOOL b) =
   case choose b of
-    Left p_yes => Just p_yes -- That's just SO b
-    Right _ => Nothing -- That's just SO not b
+    Left p_yes => unsafePerformIO $ putStrLn "prop bool succeeded" >>= (\_ => return $ Just p_yes) -- That's just SO b
+    Right _ => unsafePerformIO $ putStrLn "prop bool failed" >>= (\_ => return Nothing)
+-- Nothing -- That's just SO not b
 unmarshalProp (P_AND prop1 prop2) = do
   p1 <- unmarshalProp prop1
   p2 <- unmarshalProp prop2
   Just (MkBoth prop1 prop2 p1 p2)
-unmarshalProp (P_OR p1 p2) = 
-  maybe (maybe (Nothing) (\p2' => Just (Right p2')) (unmarshalProp p2))
-                         (\p1' => Just (Left p1')) (unmarshalProp p1)
-unmarshalProp (P_LT x y) = Nothing -- TODO
+unmarshalProp (P_OR p1 p2) = unsafePerformIO $ 
+  maybe (maybe (putStrLn "P_OR failed" >>= \_ => return Nothing) 
+                    (\p2' => return $ Just (Right p2')) (unmarshalProp p2))
+                    (\p1' => return $ Just (Left p1')) (unmarshalProp p1)
+unmarshalProp (P_LT x y) = unsafePerformIO $ putStrLn "LT!?" >>= \_ => return Nothing -- TODO
 
 
 unmarshalChunk : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
@@ -210,7 +215,8 @@ unmarshalChunk (ActivePacketRes pckt pos p_len) (LString n) =
   if pos + (8 * n) <= p_len then do
     res <- unmarshalLString (ActivePacketRes pckt pos p_len) n
     return $ Just (res, (8 * n))
-  else
+  else do
+    putStrLn "Check failed in unmarshal LString"
     return Nothing
 unmarshalChunk _ (Prop p) = 
   case unmarshalProp p of
@@ -228,7 +234,7 @@ unmarshalList (ActivePacketRes pckt pos p_len) pl =
         let xs_tup = unmarshalList (ActivePacketRes pckt (pos + len) p_len) pl in
         let (rest, rest_len) = (fst xs_tup, snd xs_tup) in
             (item :: rest, len + rest_len)
-      Nothing => ([], 0) -- Finished parsing list
+      Nothing => unsafePerformIO $ putStrLn "finished parsing list" $> return ([], 0) -- Finished parsing list
 
 
 
@@ -259,11 +265,11 @@ unmarshal' ap (x // y) = do
        Just (pckt, len) => Just (Left pckt, len)
        Nothing => case (unmarshal' ap y) of
                     Just (pckt, len) => Just (Right pckt, len)
-                    Nothing => Nothing
+                    Nothing => unsafePerformIO $ putStrLn "either failed" >>= \_ => return Nothing
                     -- map (\(pckt, len) => (Right pckt, len)) (unmarshal' ap y)
 --  (maybe (maybe Nothing (\(y_res', len) => Just $ (Right y_res', len)) y_res)
   --       (\(x_res', len) => Just $ (Left x_res', len)) x_res)
-unmarshal' ap (LIST pl) = Just (unmarshalList ap pl)
+unmarshal' ap (LIST pl) = unsafePerformIO $ putStrLn "Parsing list outer \n" >>= \_ => return $ Just (unmarshalList ap pl)
 unmarshal' ap (LISTN n pl) = unmarshalVect ap pl n
 unmarshal' ap NULL = Just ((), 0)
 unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
@@ -295,8 +301,8 @@ unmarshal : (pl : PacketLang) ->
             Length -> 
             IO (Maybe (mkTy pl, ByteLength))
 unmarshal pl pckt len = do
-  --putStrLn "Unmarshalling: "
-  --dumpPacket pckt 1024
+  putStrLn "Unmarshalling: "
+  dumpPacket pckt 1024
   return $ (unmarshal' (ActivePacketRes pckt 0 len) pl) 
   
 
