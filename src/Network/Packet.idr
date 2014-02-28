@@ -231,9 +231,9 @@ unmarshalList : ActivePacket -> (pl : PacketLang) -> (List (mkTy pl), Length)
 unmarshalList (ActivePacketRes pckt pos p_len) pl =
     case (unmarshal' (ActivePacketRes pckt pos p_len) pl) of
       Just (item, len) => 
-        let xs_tup = unmarshalList (ActivePacketRes pckt (pos + len) p_len) pl in
-        let (rest, rest_len) = (fst xs_tup, snd xs_tup) in
-            (item :: rest, len + rest_len)
+        let (rest, rest_len) = unmarshalList (ActivePacketRes pckt (pos + len) p_len) pl in
+--        let (rest, rest_len) = (fst xs_tup, snd xs_tup) in
+          (item :: rest, len + rest_len)
       Nothing => unsafePerformIO $ putStrLn "finished parsing list" $> return ([], 0) -- Finished parsing list
 
 
@@ -246,10 +246,9 @@ unmarshalVect _ _ Z = Just ([], 0)
 unmarshalVect (ActivePacketRes pckt pos p_len) pl (S k) = do
   item_tup <- unmarshal' (ActivePacketRes pckt pos p_len) pl 
   let (item, len) = (fst item_tup, snd item_tup)
-  do
-    rest_tup <- unmarshalVect (ActivePacketRes pckt (pos + len) p_len) pl k
-    let (rest, rest_len) = (fst rest_tup, snd rest_tup)
-    return (item :: rest, len + rest_len)
+  rest_tup <- unmarshalVect (ActivePacketRes pckt (pos + len) p_len) pl k
+  let (rest, rest_len) = (fst rest_tup, snd rest_tup)
+  return (item :: rest, len + rest_len)
 
 -- unmarshal' : ActivePacket -> (pl : PacketLang) -> Maybe (mkTy pl, Length)
 unmarshal' ap (CHUNK c) = unsafePerformIO $ unmarshalChunk ap c
@@ -303,7 +302,7 @@ unmarshal : (pl : PacketLang) ->
 unmarshal pl pckt len = do
   putStrLn "Unmarshalling: "
   dumpPacket pckt 1024
-  return $ (unmarshal' (ActivePacketRes pckt 0 len) pl) 
+  return $ (unmarshal' (ActivePacketRes pckt 0 (len * 8)) pl) 
   
 
 -- | Destroys a BufPtr
