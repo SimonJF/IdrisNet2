@@ -72,7 +72,7 @@ unmarshalReference' pckt pos p_len = do
 instance Handler DNSParser IO where
   handle st (UnmarshalReference ref) k = do
     putStrLn $ "Unmarshalling reference: " ++ (show ref)
-    res <- unmarshalReference' (blob st) (pcktLen st) ref
+    res <- unmarshalReference' (blob st) (ref * 8) (pcktLen st) 
     k res st
   handle _ (Initialise ptr len) k = k () (MkDNSState ptr [] len)
   handle _ (Finalise) k = k () ()
