@@ -59,5 +59,5 @@ clientTask sa p = do
        ConnectionClosed => return ()
 
 main : IO ()
-main = run [(), ()] (clientTask (IPv4Addr 127 0 0 1) 1234)
+main = run (clientTask (IPv4Addr 127 0 0 1) 1234)
 

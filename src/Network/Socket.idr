@@ -55,6 +55,12 @@ instance ToCode SocketType where
   toCode Datagram   = 2
   toCode Raw        = 3
 
+
+data RecvStructPtr = RSPtr Ptr
+data RecvfromStructPtr = RFPtr Ptr
+data BufPtr = BPtr Ptr
+data SockaddrPtr = SAPtr Ptr
+
 -- Protocol Number. Generally good enough to just set it to 0.
 ProtocolNumber : Type
 ProtocolNumber = Int
@@ -89,16 +95,35 @@ BACKLOG = 20
 EAGAIN : Int 
 EAGAIN = 11
 
--- Allocates an amount of memory given by the ByteLength parameter.
--- Used to allocate a mutable pointer to be given to the Recv functions.
--- private
-alloc : ByteLength -> IO Ptr
-alloc bl = mkForeign (FFun "idrnet_malloc" [FInt] FPtr) bl
+-- TODO: Expand to non-string payloads
+record UDPRecvData : Type where
+  MkUDPRecvData : 
+    (remote_addr : SocketAddress) ->
+    (remote_port : Port) ->
+    (recv_data : String) ->
+    (data_len : Int) ->
+    UDPRecvData
+
+record UDPAddrInfo : Type where
+  MkUDPAddrInfo : 
+    (remote_addr : SocketAddress) ->
+    (remote_port : Port) ->
+    UDPAddrInfo
 
 -- Frees a given pointer
--- private
-free : Ptr -> IO ()
-free ptr = mkForeign (FFun "idrnet_free" [FPtr] FUnit) ptr
+public
+sock_free : BufPtr -> IO ()
+sock_free (BPtr ptr) = mkForeign (FFun "idrnet_free" [FPtr] FUnit) ptr
+
+public
+sockaddr_free : SockaddrPtr -> IO ()
+sockaddr_free (SAPtr ptr) = mkForeign (FFun "idrnet_free" [FPtr] FUnit) ptr
+
+-- Allocates an amount of memory given by the ByteLength parameter.
+-- Used to allocate a mutable pointer to be given to the Recv functions.
+public
+sock_alloc : ByteLength -> IO BufPtr
+sock_alloc bl = map BPtr $ mkForeign (FFun "idrnet_malloc" [FInt] FPtr) bl
 
 record Socket : Type where
   MkSocket : (descriptor : SocketDescriptor) ->
@@ -156,8 +181,8 @@ listen sock = do
 private
 parseIPv4 : String -> SocketAddress
 parseIPv4 str = case splitted of
-                     (i1 :: i2 :: i3 :: i4 :: _) => IPv4Addr i1 i2 i3 i4
-                     _ => InvalidAddress
+                  (i1 :: i2 :: i3 :: i4 :: _) => IPv4Addr i1 i2 i3 i4
+                  _ => InvalidAddress
   where toInt' : String -> Integer
         toInt' = cast
         toInt : String -> Int
@@ -167,29 +192,29 @@ parseIPv4 str = case splitted of
 
 
 -- Retrieves a socket address from a sockaddr pointer
-getSockAddr : Ptr -> IO SocketAddress
-getSockAddr ptr = do
+getSockAddr : SockaddrPtr -> IO SocketAddress
+getSockAddr (SAPtr ptr) = do
   addr_family_int <- mkForeign (FFun "idrnet_sockaddr_family" [FPtr] FInt) ptr
+ -- putStrLn $ "Addr family int: " ++ (show addr_family_int)
   case getSocketFamily addr_family_int of
     Just AF_INET => do
       ipv4_addr <- mkForeign (FFun "idrnet_sockaddr_ipv4" [FPtr] FString) ptr
       return $ parseIPv4 ipv4_addr
     Just AF_INET6 => return IPv6Addr
-    Just AF_UNSPEC => return IPv6Addr -- FIXME: Horrible hack
+    Just AF_UNSPEC => return InvalidAddress
 
--- Accepts a connection from a listening socket.
 accept : Socket -> IO (Either SocketError (Socket, SocketAddress))
 accept sock = do
   -- We need a pointer to a sockaddr structure. This is then passed into
   -- idrnet_accept and populated. We can then query it for the SocketAddr and free it.
-  sockaddr_ptr <- mkForeign (FFun "idrnet_create_sockaddr" [] FPtr) 
+  sockaddr_ptr <- mkForeign (FFun "idrnet_create_sockaddr" [] FPtr)
   accept_res <- mkForeign (FFun "idrnet_accept" [FInt, FPtr] FInt) (descriptor sock) sockaddr_ptr
   if accept_res == (-1) then
     map Left getErrno
   else do
     let (MkSocket _ fam ty p_num) = sock
-    sockaddr <- getSockAddr sockaddr_ptr
-    free sockaddr_ptr
+    sockaddr <- getSockAddr (SAPtr sockaddr_ptr)
+    sockaddr_free (SAPtr sockaddr_ptr)
     return $ Right ((MkSocket accept_res fam ty p_num), sockaddr)
 
 send : Socket -> String -> IO (Either SocketError ByteLength)
@@ -201,9 +226,11 @@ send sock dat = do
     return $ Right send_res
 
 
-freeRecvStruct : Ptr -> IO ()
-freeRecvStruct p = mkForeign (FFun "idrnet_free_recv_struct" [FPtr] FUnit) p
+freeRecvStruct : RecvStructPtr -> IO ()
+freeRecvStruct (RSPtr p) = mkForeign (FFun "idrnet_free_recv_struct" [FPtr] FUnit) p
 
+freeRecvfromStruct : RecvfromStructPtr -> IO ()
+freeRecvfromStruct (RFPtr p) = mkForeign (FFun "idrnet_free_recvfrom_struct" [FPtr] FUnit) p
 
 recv : Socket -> Int -> IO (Either SocketError (String, ByteLength))
 recv sock len = do
@@ -213,32 +240,106 @@ recv sock len = do
   recv_res <- mkForeign (FFun "idrnet_get_recv_res" [FPtr] FInt) recv_struct_ptr
   if recv_res == (-1) then do
     errno <- getErrno
-    freeRecvStruct recv_struct_ptr
+    freeRecvStruct (RSPtr recv_struct_ptr)
     return $ Left errno
   else 
     if recv_res == 0 then do
-       freeRecvStruct recv_struct_ptr
+       freeRecvStruct (RSPtr recv_struct_ptr)
        return $ Left 0
     else do
        payload <- mkForeign (FFun "idrnet_get_recv_payload" [FPtr] FString) recv_struct_ptr
-       freeRecvStruct recv_struct_ptr
+       freeRecvStruct (RSPtr recv_struct_ptr)
        return $ Right (payload, recv_res)
 
 
 -- Sends the data in a given memory location
-sendBuf : Socket -> Ptr -> ByteLength -> IO (Either SocketError ByteLength)
-sendBuf sock ptr len = do
+sendBuf : Socket -> BufPtr -> ByteLength -> IO (Either SocketError ByteLength)
+sendBuf sock (BPtr ptr) len = do
   send_res <- mkForeign (FFun "idrnet_send_buf" [FInt, FPtr, FInt] FInt) (descriptor sock) ptr len
   if send_res == (-1) then
     map Left getErrno
   else 
     return $ Right send_res
 
-recvBuf : Socket -> Ptr -> ByteLength -> IO (Either SocketError ByteLength)
-recvBuf sock ptr len = do
+recvBuf : Socket -> BufPtr -> ByteLength -> IO (Either SocketError ByteLength)
+recvBuf sock (BPtr ptr) len = do
   recv_res <- mkForeign (FFun "idrnet_recv_buf" [FInt, FPtr, FInt] FInt) (descriptor sock) ptr len
   if (recv_res == (-1)) then
     map Left getErrno
   else
     return $ Right recv_res
+
+sendTo : Socket -> SocketAddress -> Port -> String -> IO (Either SocketError ByteLength)
+sendTo sock addr p dat = do
+  sendto_res <- mkForeign (FFun "idrnet_sendto" [FInt, FString, FString, FInt, FInt] FInt)
+                            (descriptor sock) dat (show addr) p (toCode $ family sock)
+  if sendto_res == (-1) then
+    map Left getErrno
+  else
+    return $ Right sendto_res
+
+
+sendToBuf : Socket -> SocketAddress -> Port -> BufPtr -> ByteLength -> IO (Either SocketError ByteLength)
+sendToBuf sock addr p (BPtr dat) len = do
+  sendto_res <- mkForeign (FFun "idrnet_sendto_buf" [FInt, FPtr, FInt, FString, FInt, FInt] FInt)
+                            (descriptor sock) dat len (show addr) p (toCode $ family sock)
+  if sendto_res == (-1) then
+    map Left getErrno
+  else
+    return $ Right sendto_res
+
+
+foreignGetRecvfromPayload : RecvfromStructPtr -> IO String
+foreignGetRecvfromPayload (RFPtr p) = mkForeign (FFun "idrnet_get_recvfrom_payload" [FPtr] FString) p
+
+foreignGetRecvfromAddr : RecvfromStructPtr -> IO SocketAddress
+foreignGetRecvfromAddr (RFPtr p) = do
+  sockaddr_ptr <- map SAPtr $ mkForeign (FFun "idrnet_get_recvfrom_sockaddr" [FPtr] FPtr) p
+  getSockAddr sockaddr_ptr
+
+
+foreignGetRecvfromPort : RecvfromStructPtr -> IO Port
+foreignGetRecvfromPort (RFPtr p) = do
+  sockaddr_ptr <- mkForeign (FFun "idrnet_get_recvfrom_sockaddr" [FPtr] FPtr) p
+  port <- mkForeign (FFun "idrnet_sockaddr_ipv4_port" [FPtr] FInt) sockaddr_ptr
+  return port
+
+recvFrom : Socket -> ByteLength -> IO (Either SocketError (UDPAddrInfo, String, ByteLength))
+recvFrom sock bl = do
+  recv_ptr <- mkForeign (FFun "idrnet_recvfrom" [FInt, FInt] FPtr) 
+                (descriptor sock) bl
+  let recv_ptr' = RFPtr recv_ptr
+  if !(nullPtr recv_ptr) then -- ! notation = monadic bind shortcut, not "not"
+    map Left getErrno
+  else do
+    result <- mkForeign (FFun "idrnet_get_recvfrom_res" [FPtr] FInt) recv_ptr
+    if result == -1 then do
+      freeRecvfromStruct recv_ptr'
+      map Left getErrno
+    else do
+      payload <- foreignGetRecvfromPayload recv_ptr'
+      port <- foreignGetRecvfromPort recv_ptr'
+      addr <- foreignGetRecvfromAddr recv_ptr'
+      freeRecvfromStruct recv_ptr'
+      return $ Right (MkUDPAddrInfo addr port, payload, result)
+
+
+recvFromBuf : Socket -> BufPtr -> ByteLength -> IO (Either SocketError (UDPAddrInfo, ByteLength))
+recvFromBuf sock (BPtr ptr) bl = do
+  recv_ptr <- mkForeign (FFun "idrnet_recvfrom_buf" [FInt, FPtr, FInt] FPtr) (descriptor sock) ptr bl
+  let recv_ptr' = RFPtr recv_ptr
+  if !(nullPtr recv_ptr) then -- ! notation = monadic bind shortcut, not "not"
+    map Left getErrno
+  else do
+    result <- mkForeign (FFun "idrnet_get_recvfrom_res" [FPtr] FInt) recv_ptr
+    if result == -1 then do
+      freeRecvfromStruct recv_ptr'
+      map Left getErrno
+    else do
+      port <- foreignGetRecvfromPort recv_ptr'
+      addr <- foreignGetRecvfromAddr recv_ptr'
+      freeRecvfromStruct recv_ptr'
+      return $ Right (MkUDPAddrInfo addr port, result)
+
+  
 

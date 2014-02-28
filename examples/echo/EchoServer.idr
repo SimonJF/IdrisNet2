@@ -1,65 +1,84 @@
 module Main
+import Effects
+import Effect.StdIO
 import Network.Socket
 import Network.TCP.TCPServer
 
-receive : ClientProgram ()
-echo : String -> ClientProgram ()
+
+receive' : { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
+             [STDIO, TCPSERVERCLIENT ()] } Eff IO ()
+
+echo : String -> { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
+             [STDIO, TCPSERVERCLIENT ()] } Eff IO ()
+
+
+
+receive' = do
+  recv_res <- tcpRecv 1024
+  case recv_res of
+    OperationSuccess (str, len) => echo str
+    RecoverableError _ => receive'
+    FatalError err => putStr ("Error receiving: " ++ (show err)) >>= (\_ => finaliseClient)
+    ConnectionClosed => return ()
+
+--receive : ClientProgram ()
+--echo : String -> ClientProgram ()
 
 echo str = do
   send_res <- tcpSend str
   case send_res of
-    OperationSuccess _ => receive
+    OperationSuccess _ => receive'
     RecoverableError _ => echo str
-    FatalError _ => finaliseClient
+    FatalError err => putStr ("Error sending: " ++ (show err)) >>= (\_ => finaliseClient)
     ConnectionClosed => return ()
 
-receive = do
-  recv_res <- tcpRecv 1024
-  case recv_res of
-    OperationSuccess (str, len) => echo str
-    RecoverableError _ => receive
-    FatalError _ => finaliseClient
-    ConnectionClosed => return ()
+receive : ClientProgram ()
+receive = new () receive'
 
-forkServerLoop : { [TCPSERVER (ServerListening)] ==>
-               [TCPSERVER ()] } Eff IO ()
+forkServerLoop : { [TCPSERVER (ServerListening), STDIO] ==>
+               [TCPSERVER (), STDIO] } Eff IO ()
 forkServerLoop = do
   -- Accept, and perform the "receive" program with the new socket.
   accept_res <- forkAccept receive
   case accept_res of
        OperationSuccess _ => forkServerLoop
        RecoverableError _ => forkServerLoop
-       FatalError _ => finaliseServer
+       FatalError err => putStr ("Error accepting: " ++ (show err)) >>= (\_ => finaliseServer)
        ConnectionClosed => return ()
 
-serverLoop : { [TCPSERVER (ServerListening)] ==>
-               [TCPSERVER ()] } Eff IO ()
+serverLoop : { [TCPSERVER (ServerListening), STDIO] ==>
+               [TCPSERVER (), STDIO] } Eff IO ()
 serverLoop = do
   -- Accept, and perform the "receive" program with the new socket.
   accept_res <- accept receive
   case accept_res of
        OperationSuccess _ => serverLoop
        RecoverableError _ => serverLoop
-       FatalError _ => finaliseServer
+       FatalError err => putStr ("Error accepting: " ++ (show err)) >>= (\_ => finaliseServer)
        ConnectionClosed => return ()
 
 setupServer : SocketAddress -> Port -> Bool ->
-              { [TCPSERVER ()] ==>
-                [TCPSERVER ()] } Eff IO ()
-setupServer sa port do_fork = do 
+              { [TCPSERVER (), STDIO] ==>
+                [TCPSERVER (), STDIO] } Eff IO ()
+setupServer sa port do_fork = do
+  putStr "Binding\n" 
   bind_res <- bind sa port
   case bind_res of
     OperationSuccess _ => do
+      putStr "Bound\n"
       listen_res <- listen
       case listen_res of
-           OperationSuccess _ => if do_fork then forkServerLoop else serverLoop
-           RecoverableError _ => closeBound
-           FatalError _ => finaliseServer
+           OperationSuccess _ => do
+             putStr "Listening\n"
+             if do_fork then forkServerLoop else serverLoop
+           RecoverableError err => putStr ("Recoverable error: " ++ (show err)) >>= (\_ => closeBound)
+           FatalError err => putStr ("Error binding: " ++ show err) >>= (\_ => finaliseServer)
            ConnectionClosed => return ()
     RecoverableError _ => return ()
-    FatalError _ => return ()
+    FatalError err => do putStr ("Error binding: " ++ (show err) ++ "\n") 
+                         return ()
     ConnectionClosed => return ()
 
 
 main : IO ()
-main = runInit [()] (setupServer (IPv4Addr 127 0 0 1) 1234 True) 
+main = run (setupServer (IPv4Addr 127 0 0 1) 1234 False) 

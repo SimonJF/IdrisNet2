@@ -49,9 +49,9 @@ interpListenRes ConnectionClosed = ()
 interpListenRes (RecoverableError _) = ServerBound
 interpListenRes (FatalError _) = ServerError
 
-interpBindRes : SocketOperationRes a -> Type
-interpBindRes (OperationSuccess _) = ServerBound
-interpBindRes _ = ()
+interpTCPServerBindRes : SocketOperationRes a -> Type
+interpTCPServerBindRes (OperationSuccess _) = ServerBound
+interpTCPServerBindRes _ = ()
 
 {- This is an effect that deals with an accepted client. We're allowed to 
    read from, write to, and close this socket. 
@@ -144,8 +144,7 @@ instance Handler TCPServerClient IO where
 
   handle (CC sock addr) (WritePacket pl dat) k = do
     (pckt, len) <- marshal pl dat
-    let (RawPckt pckt') = pckt
-    send_res <- sendBuf sock pckt' len
+    send_res <- sendBuf sock pckt len
     case send_res of
          Left err => 
           if err == EAGAIN then
@@ -155,7 +154,7 @@ instance Handler TCPServerClient IO where
          Right bl => k (OperationSuccess bl) (CC sock addr)
 
   handle (CC sock addr) (ReadPacket pl len) k = do
-    ptr <- alloc len
+    ptr <- sock_alloc len
     recv_res <- recvBuf sock ptr len
     case recv_res of
          Left err =>
@@ -166,16 +165,16 @@ instance Handler TCPServerClient IO where
            else
              k (FatalError err) (CE sock)
          Right bl => do
-           res <- unmarshal pl (RawPckt ptr) bl
-           free ptr
+           res <- unmarshal pl ptr bl
+           sock_free ptr
            -- The OperationSuccess depends on the actual network-y
            -- part, not the unmarshalling. If the unmarshalling fails,
            -- we still keep the connection open.
            k (OperationSuccess res) (CC sock addr) 
 
 data TCPServer : Effect where
-  -- Bind a socket to a given address and port
-  Bind : SocketAddress -> Port -> { () ==> interpBindRes result }
+  -- TCPServerBind a socket to a given address and port
+  TCPServerBind : SocketAddress -> Port -> { () ==> interpTCPServerBindRes result }
                                   TCPServer (SocketOperationRes ()) 
   -- Listen
   Listen : { ServerBound ==> interpListenRes result } 
@@ -198,9 +197,9 @@ TCPSERVER t = MkEff t TCPServer
 
 {- TCP Accessor Functions -}
 
-bind : SocketAddress -> Port -> { [TCPSERVER ()] ==> [TCPSERVER (interpBindRes result)] } 
+bind : SocketAddress -> Port -> { [TCPSERVER ()] ==> [TCPSERVER (interpTCPServerBindRes result)] } 
                                 Eff IO (SocketOperationRes ())
-bind sa p = (Bind sa p)
+bind sa p = (TCPServerBind sa p)
 
 listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] } 
          Eff IO (SocketOperationRes ())
@@ -227,7 +226,7 @@ finaliseServer = Finalise
 
 {- Handler Functions -}
 instance Handler TCPServer IO where 
-  handle () (Bind sa p) k = do
+  handle () (TCPServerBind sa p) k = do
     sock_res <- socket AF_INET Stream 0
     case sock_res of
       Left err => k (FatalError err) ()

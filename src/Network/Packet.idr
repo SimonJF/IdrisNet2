@@ -8,8 +8,6 @@ import Effects
 %include C "bindata.h"
 %link C "bindata.o"
 
-%access private
-
 -- Type synonyms for different arguments to foreign functions
 public
 BytePos : Type
@@ -24,38 +22,37 @@ ByteData : Type
 ByteData = Int
 
 public
-data RawPacket = RawPckt Ptr
 data ActivePacket : Type where
-  ActivePacketRes : RawPacket -> BytePos -> Length -> ActivePacket
+  ActivePacketRes : BufPtr -> BytePos -> Length -> ActivePacket
 
 public
-dumpPacket : RawPacket -> Length -> IO ()
-dumpPacket (RawPckt pckt) len =
+dumpPacket : BufPtr -> Length -> IO ()
+dumpPacket (BPtr pckt) len =
   mkForeign (FFun "dumpPacket" [FPtr, FInt] FUnit) pckt len
 
 
 {- Internal FFI Functions -}
-foreignCreatePacket : Int -> IO RawPacket
-foreignCreatePacket len = map RawPckt $ mkForeign (FFun "newPacket" [FInt] FPtr) len
+foreignCreatePacket : Int -> IO BufPtr
+foreignCreatePacket len = map BPtr $ mkForeign (FFun "newPacket" [FInt] FPtr) len
 
-foreignSetByte : RawPacket -> Position -> ByteData -> IO ()
-foreignSetByte (RawPckt pckt) dat pos = 
+foreignSetByte : BufPtr -> Position -> ByteData -> IO ()
+foreignSetByte (BPtr pckt) dat pos = 
   mkForeign (FFun "setPacketByte" [FPtr, FInt, FInt] FUnit) pckt dat pos
 
-foreignSetBits : RawPacket -> Position -> Position -> ByteData -> IO ()
-foreignSetBits (RawPckt pckt) start end dat = 
+foreignSetBits : BufPtr -> Position -> Position -> ByteData -> IO ()
+foreignSetBits (BPtr pckt) start end dat = 
   mkForeign (FFun "setPacketBits" [FPtr, FInt, FInt, FInt] FUnit) pckt start end dat
 
-foreignSetString : RawPacket -> Position -> String -> Int -> Char -> IO ()
-foreignSetString (RawPckt pckt) start dat len term =
+foreignSetString : BufPtr -> Position -> String -> Int -> Char -> IO ()
+foreignSetString (BPtr pckt) start dat len term =
   mkForeign (FFun "setPacketString" [FPtr, FInt, FString, FInt, FChar] FUnit) pckt start dat len term
 
-foreignGetByte : RawPacket -> Position -> IO ByteData
-foreignGetByte (RawPckt pckt) pos = 
+foreignGetByte : BufPtr -> Position -> IO ByteData
+foreignGetByte (BPtr pckt) pos = 
   mkForeign (FFun "getPacketByte" [FPtr, FInt] FInt) pckt pos
 
-foreignGetBits : RawPacket -> Position -> Position -> IO ByteData
-foreignGetBits (RawPckt pckt) start end =
+foreignGetBits : BufPtr -> Position -> Position -> IO ByteData
+foreignGetBits (BPtr pckt) start end =
   mkForeign (FFun "getPacketBits" [FPtr, FInt, FInt] FInt) pckt start end
 
 {- Marshalling -}
@@ -89,10 +86,11 @@ marshal' : ActivePacket -> (pl : PacketLang) -> mkTy pl -> IO Length
 marshal' ap (CHUNK c) c_dat = marshalChunk ap c c_dat
 marshal' ap (IF True pl_t _) ite = marshal' ap pl_t ite
 marshal' ap (IF False _ pl_f) ite = marshal' ap pl_f ite
-marshal' ap (pl_1 // pl_2) x = either x (\x_l => marshal' ap pl_1 x_l)
-                                       (\x_r => marshal' ap pl_2 x_r) 
+marshal' ap (pl_1 // pl_2) x = either (\x_l => marshal' ap pl_1 x_l)
+                                      (\x_r => marshal' ap pl_2 x_r) x
 marshal' ap (LIST pl) xs = marshalList ap pl xs
 marshal' ap (LISTN n pl) xs = marshalVect ap pl xs
+marshal' _ NULL _ = return 0
 marshal' ap (c >>= k) (x ** y) = do
   len <- marshal' ap c x
   let (ActivePacketRes pckt pos p_len) = ap
@@ -118,6 +116,7 @@ marshalList (ActivePacketRes pckt pos p_len) pl (x::xs) = do
 
 
 {- Unmarshalling Code -}
+public
 unmarshal' : ActivePacket -> (pl : PacketLang) -> Maybe (mkTy pl, Length)
 
 
@@ -153,7 +152,7 @@ unmarshalCString (ActivePacketRes pckt pos p_len) = do
   res <- unmarshalCString' (ActivePacketRes pckt pos p_len) 0
   case res of 
        Just (chrs, len) => return $ Just (pack chrs, len) 
-       Nothing => return Nothing
+       Nothing => putStrLn "unmarshal C string failed" $> return Nothing
 
 -- TODO: Maybe recurse using Nat instead of Int (for sake of totality) but we need to use as an Int
 unmarshalLString' : ActivePacket -> Int -> IO (List Char)
@@ -173,33 +172,38 @@ unmarshalBits : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
 unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + width) <= p_len)
   | True = do
     res <- foreignGetBits pckt pos (pos + width - 1)
+    putStrLn $ "Read: " ++ show res
     return $ Just $ (BInt res (believe_me oh), width) -- Have to trust it, as it's from C
-  | False = return Nothing
+  | False = putStrLn "Check failed in unmarshalBits" $> return Nothing
 
 unmarshalBool : ActivePacket -> IO (Maybe (Bool, Length))
 unmarshalBool (ActivePacketRes pckt pos p_len) with ((pos + 1) <= p_len)
   | True = do
       res <- foreignGetBits pckt pos pos
-      return (Just (res == 1, 1))
-  | False = return Nothing
+      let result = (res == 1)
+      putStrLn $ "Read bool: " ++ show result
+      return $ Just (result, 1)
+  | False = putStrLn "Unmarshal bool failed" $> return Nothing
 
 unmarshalProp : (p : Proposition) -> Maybe (propTy p)
 unmarshalProp (P_EQ x y) = 
   case decEq x y of
     (Yes p) => Just p
-    (No p) => Nothing
+    (No p) => unsafePerformIO $ putStrLn "decEq failed" >>= (\_ => return Nothing)
 unmarshalProp (P_BOOL b) =
   case choose b of
-    Left p_yes => Just p_yes -- That's just SO b
-    Right _ => Nothing -- That's just SO not b
+    Left p_yes => unsafePerformIO $ putStrLn "prop bool succeeded" >>= (\_ => return $ Just p_yes) -- That's just SO b
+    Right _ => unsafePerformIO $ putStrLn "prop bool failed" >>= (\_ => return Nothing)
+-- Nothing -- That's just SO not b
 unmarshalProp (P_AND prop1 prop2) = do
   p1 <- unmarshalProp prop1
   p2 <- unmarshalProp prop2
   Just (MkBoth prop1 prop2 p1 p2)
-unmarshalProp (P_OR p1 p2) = 
-  maybe (maybe (Nothing) (\p2' => Just (Right p2')) (unmarshalProp p2))
-                         (\p1' => Just (Left p1')) (unmarshalProp p1)
-unmarshalProp (P_LT x y) = Nothing -- TODO
+unmarshalProp (P_OR p1 p2) = unsafePerformIO $ 
+  maybe (maybe (putStrLn "P_OR failed" >>= \_ => return Nothing) 
+                    (\p2' => return $ Just (Right p2')) (unmarshalProp p2))
+                    (\p1' => return $ Just (Left p1')) (unmarshalProp p1)
+unmarshalProp (P_LT x y) = unsafePerformIO $ putStrLn "LT!?" >>= \_ => return Nothing -- TODO
 
 
 unmarshalChunk : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
@@ -211,7 +215,8 @@ unmarshalChunk (ActivePacketRes pckt pos p_len) (LString n) =
   if pos + (8 * n) <= p_len then do
     res <- unmarshalLString (ActivePacketRes pckt pos p_len) n
     return $ Just (res, (8 * n))
-  else
+  else do
+    putStrLn "Check failed in unmarshal LString"
     return Nothing
 unmarshalChunk _ (Prop p) = 
   case unmarshalProp p of
@@ -226,10 +231,10 @@ unmarshalList : ActivePacket -> (pl : PacketLang) -> (List (mkTy pl), Length)
 unmarshalList (ActivePacketRes pckt pos p_len) pl =
     case (unmarshal' (ActivePacketRes pckt pos p_len) pl) of
       Just (item, len) => 
-        let xs_tup = unmarshalList (ActivePacketRes pckt (pos + len) p_len) pl in
-        let (rest, rest_len) = (fst xs_tup, snd xs_tup) in
-            (item :: rest, len + rest_len)
-      Nothing => ([], 0) -- Finished parsing list
+        let (rest, rest_len) = unmarshalList (ActivePacketRes pckt (pos + len) p_len) pl in
+--        let (rest, rest_len) = (fst xs_tup, snd xs_tup) in
+          (item :: rest, len + rest_len)
+      Nothing => unsafePerformIO $ putStrLn "finished parsing list" $> return ([], 0) -- Finished parsing list
 
 
 
@@ -241,10 +246,9 @@ unmarshalVect _ _ Z = Just ([], 0)
 unmarshalVect (ActivePacketRes pckt pos p_len) pl (S k) = do
   item_tup <- unmarshal' (ActivePacketRes pckt pos p_len) pl 
   let (item, len) = (fst item_tup, snd item_tup)
-  do
-    rest_tup <- unmarshalVect (ActivePacketRes pckt (pos + len) p_len) pl k
-    let (rest, rest_len) = (fst rest_tup, snd rest_tup)
-    return (item :: rest, len + rest_len)
+  rest_tup <- unmarshalVect (ActivePacketRes pckt (pos + len) p_len) pl k
+  let (rest, rest_len) = (fst rest_tup, snd rest_tup)
+  return (item :: rest, len + rest_len)
 
 -- unmarshal' : ActivePacket -> (pl : PacketLang) -> Maybe (mkTy pl, Length)
 unmarshal' ap (CHUNK c) = unsafePerformIO $ unmarshalChunk ap c
@@ -260,12 +264,13 @@ unmarshal' ap (x // y) = do
        Just (pckt, len) => Just (Left pckt, len)
        Nothing => case (unmarshal' ap y) of
                     Just (pckt, len) => Just (Right pckt, len)
-                    Nothing => Nothing
+                    Nothing => unsafePerformIO $ putStrLn "either failed" >>= \_ => return Nothing
                     -- map (\(pckt, len) => (Right pckt, len)) (unmarshal' ap y)
 --  (maybe (maybe Nothing (\(y_res', len) => Just $ (Right y_res', len)) y_res)
   --       (\(x_res', len) => Just $ (Left x_res', len)) x_res)
-unmarshal' ap (LIST pl) = Just (unmarshalList ap pl)
+unmarshal' ap (LIST pl) = unsafePerformIO $ putStrLn "Parsing list outer \n" >>= \_ => return $ Just (unmarshalList ap pl)
 unmarshal' ap (LISTN n pl) = unmarshalVect ap pl n
+unmarshal' ap NULL = Just ((), 0)
 unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
   res1_tup <- unmarshal' (ActivePacketRes pckt pos p_len) c 
   -- Hack hack hack around the TC resolution bug...
@@ -276,10 +281,10 @@ unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
 
 
 {- Publicly-Facing Functions... -}
-public
--- | Given a packet language and a packet, creates a RawPacket that
+-- | Given a packet language and a packet, creates a BufPtr that
 -- | may be sent over the network by a UDP or TCP socket
-marshal : (pl : PacketLang) -> (mkTy pl) -> IO (RawPacket, Length)
+public
+marshal : (pl : PacketLang) -> (mkTy pl) -> IO (BufPtr, Length)
 marshal pl dat = do
   let pckt_len = bitLength pl dat
   pckt <- foreignCreatePacket pckt_len
@@ -288,21 +293,21 @@ marshal pl dat = do
   --dumpPacket pckt 1024
   return (pckt, len)
 
+-- | Given a packet language and a BufPtr, unmarshals the packet
 public 
--- | Given a packet language and a RawPacket, unmarshals the packet
 unmarshal : (pl : PacketLang) -> 
-            RawPacket -> 
+            BufPtr -> 
             Length -> 
             IO (Maybe (mkTy pl, ByteLength))
 unmarshal pl pckt len = do
-  --putStrLn "Unmarshalling: "
-  --dumpPacket pckt 1024
-  return $ (unmarshal' (ActivePacketRes pckt 0 len) pl) 
+  putStrLn "Unmarshalling: "
+  dumpPacket pckt 1024
+  return $ (unmarshal' (ActivePacketRes pckt 0 (len * 8)) pl) 
   
 
+-- | Destroys a BufPtr
 public
--- | Destroys a RawPacket
-freePacket : RawPacket -> IO ()
-freePacket (RawPckt pckt) = mkForeign (FFun "freePacket" [FPtr] FUnit) pckt
+freePacket : BufPtr -> IO ()
+freePacket (BPtr pckt) = mkForeign (FFun "freePacket" [FPtr] FUnit) pckt
 
 

@@ -22,6 +22,9 @@ natToInt : Nat -> Int
 natToInt Z = 0
 natToInt (S k) = 1 + (natToInt k)
 
+-- FIXME: This is a horrible, horrible, horrible, horrible falsehood.
+-- But for now, it'll do.
+%assert_total
 intToNat : Int -> Nat
 intToNat 0 = Z
 intToNat i = S (intToNat (i - 1))
@@ -47,7 +50,7 @@ fits x bits = ((log2 x_nat) + 1) < ((log2 b_nat) + 1)
 data Bounded : Int -> Type where
 -- TODO: The so proof should be a proof that x fits into i bits
   --BInt : (x : Int) -> (prf : Fits x i) -> Bounded i
-  BInt : (x : Int) -> (prf : so (x < i)) -> Bounded i
+  BInt : (x : Int) -> (prf : so (x < (pow 2 (cast i)))) -> Bounded i
 
 instance Show (Bounded i) where
   show (BInt x _) = show x
@@ -105,7 +108,6 @@ mutual
 
 -- Decode chunks into Idris types
 -- TODO <<
-partial
 chunkTy : Chunk -> Type
 chunkTy (Bit w p) = Bounded w -- FIXME, take into account bit width
 chunkTy CString = String
@@ -123,6 +125,7 @@ mutual
     (//) : PacketLang -> PacketLang -> PacketLang
     LIST : PacketLang -> PacketLang
     LISTN : (n : Nat) -> PacketLang -> PacketLang
+    NULL : PacketLang -- Sometimes, we want to signify that there's nothing there
     (>>=) : (p : PacketLang) -> (mkTy p -> PacketLang) -> PacketLang
     
   -- Packet language decoding
@@ -132,6 +135,7 @@ mutual
   mkTy (l // r) = Either (mkTy l) (mkTy r)
   mkTy (LIST x) = List (mkTy x)
   mkTy (LISTN n a) = Vect n (mkTy a)
+  mkTy NULL = ()
   mkTy (c >>= k) = (x ** mkTy (k x))
 
 
@@ -159,9 +163,10 @@ vectLength pl (x :: xs) = bitLength pl x + (vectLength pl xs)
 bitLength (CHUNK c) x = chunkLength c x
 bitLength (IF True yes _) x = bitLength yes x
 bitLength (IF False _ no) x = bitLength no x
-bitLength (y // z) x = either x (\l_x => bitLength y l_x) (\r_x => bitLength z r_x)
+bitLength (y // z) x = either (\l_x => bitLength y l_x) (\r_x => bitLength z r_x) x
 bitLength (LIST pl) x = listLength pl x
 bitLength (LISTN n pl) x = vectLength pl x
+bitLength NULL _ = 0
 bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 
@@ -185,8 +190,9 @@ syntax p_either [c1] [c2] = (c1 // c2)
 syntax [x] "##" [y] = (x ** y)
 syntax bool = (CHUNK (CBool))
 syntax prop [p] = (CHUNK (Prop p))
-syntax prop_bool [p] = (P_BOOL p)
-syntax prop_or [p1] [p2] = (P_OR p1 p2)
-syntax prop_and [p1] [p2] = (P_AND p1 p2)
-syntax prop_eq [p1] [p2] = (P_EQ p1 p2)
-
+syntax prop_bool [p] = (CHUNK (Prop (P_BOOL p)))
+syntax prop_or [p1] [p2] = (CHUNK (Prop (P_OR p1 p2)))
+syntax prop_and [p1] [p2] = (CHUNK (Prop (P_AND p1 p2)))
+syntax prop_eq [p1] [p2] = (CHUNK (Prop (P_EQ p1 p2)))
+syntax bounded_bits [len] [prf] = (CHUNK (Bit len prf))
+syntax null = NULL

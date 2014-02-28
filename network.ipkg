@@ -1,7 +1,15 @@
 package network
 
 sourcedir = src
-modules = Network.Packet, Network.PacketLang, Network.Socket, Network.TCP.TCPClient, Network.TCP.TCPCommon, Network.TCP.TCPServer
+modules = Network.Packet, 
+          Network.PacketLang, 
+          Network.Socket, 
+          Network.TCP.TCPClient, 
+          Network.TCP.TCPCommon, 
+          Network.TCP.TCPServer,
+          Network.UDP.UDPClient,
+          Network.UDP.UDPCommon,
+          Network.UDP.UDPServer
 opts = "-p neweffects"
 makefile = MakefileC
 
