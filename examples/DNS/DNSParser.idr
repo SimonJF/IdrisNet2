@@ -281,7 +281,70 @@ parseDNS ptr len pckt = do
   finalise
   return res
 
+-- data DNSEncodeError = SomeEncodeError
 
+encodeHeader : DNSHeader -> (mkTy dnsHeader) 
+encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) =  ?encodeHeader_rhs
+
+encodeRR : DNSRecord -> (mkTy dnsRR)
+encodeRR (MkDNSRecord name ty cls ttl rel pl) = ?encodeRR_rhs
+
+encodeQuestion : DNSQuestion -> (mkTy dnsQuestion)
+encodeQuestion (MkDNSQuestion qnames ty cls) = ?encodeQuestion_rhs
+
+-- This shit is frustrating. 
+{-
+DNSParser.idr:297:11:When elaborating right hand side of encodeDNS:
+Can't unify
+        intToNat (val x)
+with
+        nsc
+
+Gonna have to have a think about this one. Can't infer it automatically, either.
+Probably will have to prove natToInt <-> intToNat.
+-}
+
+
+-- Our old friend... Might be a better way of doing this
+lemma_vect_len : {x : Nat} -> (y : Nat) -> Vect x a -> Maybe (Vect y a)
+lemma_vect_len {x} y xs with (decEq x y)
+  lemma_vect_len {x} x xs | (Yes refl) = Just xs
+  lemma_vect_len {x} y _  | (No _) = Nothing
+
+---encodeVectLen : (n : Nat) -> Bounded
+
+lemma_vect : (xs : Vect n a) -> (y : Bounded 16) -> Maybe (Vect (intToNat (val y)) a )
+lemma_vect xs b = lemma_vect_len (intToNat (val b)) xs  
+
+isBounded16 : Nat -> (Maybe (Bounded 16))
+isBounded16 n = case choose (i_n < (pow 2 16)) of
+    Left yes => Just (BInt i_n yes)
+    Right _ => Nothing
+  where i_n : Int 
+        i_n = natToInt n
+
+
+encodeDNS : DNSPacket -> Maybe (mkTy dns)
+encodeDNS (MkDNS hdr qc ac nsc arc qs as auths ars) = do
+    b_qc <- isBounded16 qc
+    qs'' <- lemma_vect (map encodeQuestion qs) b_qc
+    b_ac <- isBounded16 ac
+    ac'' <- lemma_vect (map encodeRR as) b_ac
+    b_nsc <- isBounded16 nsc
+    nsc'' <- lemma_vect (map encodeRR auths) b_nsc
+    b_arc <- isBounded16 arc 
+    arc'' <- lemma_vect (map encodeRR ars) b_arc
+    Just ((encodeHeader hdr) ## b_qc ## b_ac ## b_nsc ## b_arc ## qs'' ## ac'' ## nsc'' ## arc'')
+{-
+    ((encodeHeader hdr) ## _ ## _ ## _ ## _ ## 
+     (map encodeQuestion qs) ## (map encodeRR as) ## 
+     (map encodeRR auths) ## (map encodeRR ars))-- encoded_ars)
+
+  where encoded_header : (mkTy dnsHeader)
+        encoded_header = encodeHeader hdr
+        encoded_qs : Maybe (Vect (intToNat (val qs_n)) DNSQuestion)
+        encoded_qs = lemma_vect_n 
+-}
 -- runInit [(MkDNSState ptr [] len)] (parseDNSPacket pckt)
 
 
