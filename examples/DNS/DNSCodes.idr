@@ -37,6 +37,11 @@ codeToDNSOpcode 1 = Just IQUERY
 codeToDNSOpcode 2 = Just STATUS
 codeToDNSOpcode _ = Nothing
 
+dnsOpcodeToCode : DNSHdrOpcode -> Int
+dnsOpcodeToCode QUERY = 0
+dnsOpcodeToCode IQUERY = 1
+dnsOpcodeToCode STATUS = 2
+
 data DNSClass = DNSClassIN -- Internet
   -- None of the following are used, anyway...
 {-
@@ -93,6 +98,14 @@ dnsCodeToQClass 3 = Just DNSQClassCH
 dnsCodeToQClass 4 = Just DNSQClassHS
 dnsCodeToQClass 255 = Just DNSQClassANY
 dnsCodeToQClass _ = Nothing
+
+
+dnsQClassToCode : DNSQClass -> Int
+dnsQClassToCode DNSQClassIN = 1
+dnsQClassToCode DNSQClassCS = 2
+dnsQClassToCode DNSQClassCH = 3
+dnsQClassToCode DNSQClassHS = 4
+dnsQClassToCode DNSQClassANY = 255
 
 -- A few constants... Might change this
 A_VAL : Int
@@ -225,6 +238,17 @@ data DNSQTypeRel : Int -> DNSQType -> Type where
 --  DNSQTypeRelHINFO : DNSQTypeRel 13 DNSQTypeHINFO
 --  DNSQTypeRelMINFO : DNSQTypeRel 14 DNSQTypeMINFO
 
+dnsTypeToCode : DNSType -> Int
+dnsTypeToCode DNSTypeA = 1
+dnsTypeToCode DNSTypeNS = 2
+dnsTypeToCode DNSTypeCNAME = 5
+dnsTypeToCode DNSTypeNULL = 10
+dnsTypeToCode DNSTypePTR = 12
+dnsTypeToCode DNSTypeMX = 15
+dnsTypeToCode DNSTypeTXT = 16
+dnsTypeToCode DNSTypeAAAA = 28
+
+
 dnsCodeToType : (code : Int) -> Maybe DNSType
 dnsCodeToType 1 = Just DNSTypeA
 dnsCodeToType 2 = Just DNSTypeNS
@@ -266,6 +290,7 @@ dnsTypeRel 28 DNSTypeAAAA = Just DNSTypeRelAAAA
 --dnsTypeToRel {code = 11} DNSTypeWKS = DNSTypeRelWKS
 --dnsTypeToRel {code = 13} DNSTypeHINFO = DNSTypeRelHINFO
 --dnsTypeToRel {code = 14} DNSTypeMINFO = DNSTypeRelMINFO
+
 dnsCodeToQType : (code : Int) -> Maybe DNSQType
 dnsCodeToQType 1 = Just DNSQTypeA
 dnsCodeToQType 2 = Just DNSQTypeNS
@@ -280,6 +305,21 @@ dnsCodeToQType 253 = Just DNSQTypeMAILB
 dnsCodeToQType 254 = Just DNSQTypeMAILA
 dnsCodeToQType 255 = Just DNSQTypeALL
 dnsCodeToQType _ = Nothing
+
+
+dnsQTypeToCode : DNSQType -> Int
+dnsQTypeToCode DNSQTypeA = 1
+dnsQTypeToCode DNSQTypeNS = 2
+dnsQTypeToCode DNSQTypeCNAME = 5
+dnsQTypeToCode DNSQTypeNULL = 10
+dnsQTypeToCode DNSQTypePTR = 12
+dnsQTypeToCode DNSQTypeMX = 15
+dnsQTypeToCode DNSQTypeTXT = 16
+dnsQTypeToCode DNSQTypeAAAA = 28
+dnsQTypeToCode DNSQTypeAXFR = 252
+dnsQTypeToCode DNSQTypeMAILB = 253
+dnsQTypeToCode DNSQTypeMAILA = 254
+dnsQTypeToCode DNSQTypeALL = 255
 
 dnsQTypeRel : (code : Int) -> (ty : DNSQType) -> Maybe (DNSQTypeRel code ty)
 dnsQTypeRel 1 DNSQTypeA = Just DNSQTypeRelA

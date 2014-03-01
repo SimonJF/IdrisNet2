@@ -283,26 +283,6 @@ parseDNS ptr len pckt = do
 
 -- data DNSEncodeError = SomeEncodeError
 
-encodeHeader : DNSHeader -> (mkTy dnsHeader) 
-encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) =  ?encodeHeader_rhs
-
-encodeRR : DNSRecord -> (mkTy dnsRR)
-encodeRR (MkDNSRecord name ty cls ttl rel pl) = ?encodeRR_rhs
-
-encodeQuestion : DNSQuestion -> (mkTy dnsQuestion)
-encodeQuestion (MkDNSQuestion qnames ty cls) = ?encodeQuestion_rhs
-
--- This shit is frustrating. 
-{-
-DNSParser.idr:297:11:When elaborating right hand side of encodeDNS:
-Can't unify
-        intToNat (val x)
-with
-        nsc
-
-Gonna have to have a think about this one. Can't infer it automatically, either.
-Probably will have to prove natToInt <-> intToNat.
--}
 
 
 -- Our old friend... Might be a better way of doing this
@@ -313,30 +293,100 @@ lemma_vect_len {x} y xs with (decEq x y)
 
 ---encodeVectLen : (n : Nat) -> Bounded
 
-lemma_vect : (xs : Vect n a) -> (y : Bounded 16) -> Maybe (Vect (intToNat (val y)) a )
-lemma_vect xs b = lemma_vect_len (intToNat (val b)) xs  
+lemma_vect : {m : Nat} -> (xs : Vect n a) -> (y : Bounded m) -> Maybe (Vect (intToNat (val y)) a )
+lemma_vect {m} xs b = lemma_vect_len (intToNat (val b)) xs  
 
-isBounded16 : Nat -> (Maybe (Bounded 16))
-isBounded16 n = case choose (i_n < (pow 2 16)) of
-    Left yes => Just (BInt i_n yes)
-    Right _ => Nothing
+isBounded : (bound : Nat) -> Nat -> (Maybe (Bounded bound))
+isBounded b n = 
+  case choose (i_n < (pow 2 b)) of
+      Left yes => Just (BInt i_n yes)
+      Right _ => Nothing
   where i_n : Int 
         i_n = natToInt n
 
 
+encodeHeader : DNSHeader -> (mkTy dnsHeader) 
+encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) =  ?encodeHeader_rhs
+
+encodeRR : DNSRecord -> (mkTy dnsRR)
+encodeRR (MkDNSRecord name ty cls ttl rel pl) = ?encodeRR_rhs
+
+zeroBit : Bounded 1
+zeroBit = BInt 0 oh
+
+oneBit : Bounded 1
+oneBit = BInt 1 oh 
+
+charToBits8 : Char -> Bounded 8
+charToBits8 c = BInt (ord c) (believe_me oh) -- Premise
+
+encodeString : String -> (n ** (Vect n (Bounded 8)))
+encodeString str = 
+  let unpacked_string = map charToBits8 (unpack str) in
+  let vect_string = fromList unpacked_string in
+  (_ ** vect_string)
+
+--mkTagCheck0 : (mkTy (tagCheck 0))
+--mkTagCheck0 = (zeroBit ## zeroBit ## (Yes refl) ## (Yes refl))
+
+{-
+mkTagCheck0 : (mkTy (tagCheck 0))
+mkTagCheck0 with (decEq (val zeroBit) 0)
+  mkTagCheck0 | Yes refl = (zeroBit ## zeroBit ## refl ## refl)
+  mkTagCheck0 | No refl impossible
+--  mkTagCheck x 0 | No _ = (zeroBit ## zeroBit ## refl ## refl)
+-}
+
+mkTagCheck0 : (mkTy (tagCheck 0))
+mkTagCheck0 = let zbit = zeroBit in
+              (zbit ## zbit ## refl ## refl)
+--mkTagCheck1 : (mkTy (tagCheck 1))
+--mkTagCheck1 = (oneBit ## oneBit ## refl ## refl)
+
+nullT : (mkTy nullterm)
+nullT = (b0 ## oh)
+  where b0 : Bounded 8
+        b0 = BInt 0 oh
+
+encodeDomainFragment : DomainFragment -> Maybe (mkTy dnsLabel)
+encodeDomainFragment frag = do
+  let (len ** vect_string) = encodeString frag
+  encoded_len <- isBounded 6 len
+  case choose ((val encoded_len) /= 0) of
+    Left prf => 
+      case lemma_vect vect_string encoded_len of
+        Just encoded_string' => Just (mkTagCheck0 ## encoded_len ## prf ## encoded_string') 
+        Nothing => Nothing
+    _ => Nothing
+
+encodeDomain : List DomainFragment -> Maybe (mkTy dnsDomain)
+encodeDomain xs = do
+  xs <- sequence $ map encodeDomainFragment xs
+  return (Right (xs ## (Left nullT)))
+
+
+encodeQuestion : DNSQuestion -> Maybe (mkTy dnsQuestion)
+encodeQuestion (MkDNSQuestion qnames ty cls) = do
+  dom <- encodeDomain qnames 
+  b_ty_code <- isBounded 16 (intToNat $ dnsQTypeToCode ty)
+  b_cls_code <- isBounded 16 (intToNat $ dnsQClassToCode cls) 
+  case (choose (validQTYPE (val b_ty_code)), choose (validQCLASS (val b_cls_code))) of
+    (Left p1, Left p2) => Just (dom ## b_ty_code ## p1 ## b_cls_code ## p2)
+    _ => Nothing
+{-
 encodeDNS : DNSPacket -> Maybe (mkTy dns)
 encodeDNS (MkDNS hdr qc ac nsc arc qs as auths ars) = do
-    b_qc <- isBounded16 qc
+    b_qc <- isBounded 16 qc
     qs'' <- lemma_vect (map encodeQuestion qs) b_qc
-    b_ac <- isBounded16 ac
+    b_ac <- isBounded 16 ac
     ac'' <- lemma_vect (map encodeRR as) b_ac
-    b_nsc <- isBounded16 nsc
+    b_nsc <- isBounded 16 nsc
     nsc'' <- lemma_vect (map encodeRR auths) b_nsc
-    b_arc <- isBounded16 arc 
+    b_arc <- isBounded 16 arc 
     arc'' <- lemma_vect (map encodeRR ars) b_arc
     Just ((encodeHeader hdr) ## b_qc ## b_ac ## b_nsc ## b_arc ## qs'' ## ac'' ## nsc'' ## arc'')
-{-
-    ((encodeHeader hdr) ## _ ## _ ## _ ## _ ## 
+ 
+   ((encodeHeader hdr) ## _ ## _ ## _ ## _ ## 
      (map encodeQuestion qs) ## (map encodeRR as) ## 
      (map encodeRR auths) ## (map encodeRR ars))-- encoded_ars)
 

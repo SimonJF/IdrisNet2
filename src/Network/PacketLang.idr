@@ -32,25 +32,10 @@ intToNat i = S (intToNat (i - 1))
 strLen : String -> Int
 strLen s = natToInt $ length s
 
-
-{-
-data Fits : Int -> Int -> Type where
-  MkFits : (a : Int) -> 
-           (b : Int) -> 
-           { default tactics {compute; refine oh; solve;}
-    prf : so ((log2 (intToNat a) + 1) <= (intToNat b))} -> Fits a b
-    -}
-
-{-
-fits : (x : Int) -> (b : Int) -> Bool
-fits x bits = ((log2 x_nat) + 1) < ((log2 b_nat) + 1)
-  where x_nat = intToNat x
-        b_nat = intToNat bits
-        -}-- Bounded integers
-data Bounded : Int -> Type where
+data Bounded : Nat -> Type where
 -- TODO: The so proof should be a proof that x fits into i bits
   --BInt : (x : Int) -> (prf : Fits x i) -> Bounded i
-  BInt : (x : Int) -> (prf : so (x < (pow 2 (cast i)))) -> Bounded i
+  BInt : (x : Int) -> (prf : so (x < (pow 2 i))) -> Bounded i
 
 instance Show (Bounded i) where
   show (BInt x _) = show x
@@ -63,7 +48,7 @@ val (BInt i p) = i
 -- Primitive Binary Chunks
 data Chunk : Type where
   -- Bits must be at least 1 wide
-  Bit : (width : Int) -> so (width > 0) -> Chunk
+  Bit : (width : Nat) -> so (width > 0) -> Chunk
   -- Boolean value, stored as one bit.
   -- Convenience, so we can marshal / unmarshal directly as a Bool
   CBool : Chunk
@@ -115,7 +100,6 @@ chunkTy (LString i) = String
 chunkTy (Prop p) = propTy p
 chunkTy (CBool) = Bool
 
-
 -- Packet Language
 mutual
   data PacketLang : Type where
@@ -143,7 +127,7 @@ mutual
 total
 bitLength : (pl : PacketLang) -> mkTy pl -> Length
 chunkLength : (c : Chunk) -> chunkTy c -> Length
-chunkLength (Bit w p) _ = w
+chunkLength (Bit w p) _ = natToInt w
 chunkLength CBool _ = 1
 -- TODO: This doesn't take into account if there's a null character
 -- within the string itself. I had something nice using span earlier,
@@ -171,7 +155,7 @@ bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 
 -- Syntax rules, so it's nicer to write these things...
-bit : (w : Int) -> {default tactics { refine oh; solve;} 
+bit : (w : Nat) -> {default tactics { refine oh; solve;} 
                      p : so (w > 0) } 
                 -> Chunk
 bit w {p} = Bit w p

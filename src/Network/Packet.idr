@@ -60,7 +60,7 @@ foreignGetBits (BPtr pckt) start end =
 marshalChunk : ActivePacket -> (c : Chunk) -> (chunkTy c) -> IO Length
 marshalChunk (ActivePacketRes pckt pos p_len) (Bit w p) (BInt dat p2) = do
   let len = chunkLength (Bit w p) (BInt dat p2)
-  foreignSetBits pckt pos (pos + w - 1) dat
+  foreignSetBits pckt pos (pos + (natToInt w) - 1) dat
   return len
 marshalChunk (ActivePacketRes pckt pos p_len) CBool b = do
   let bit = if b then 1 else 0
@@ -169,11 +169,11 @@ unmarshalLString : ActivePacket -> Int -> IO String
 unmarshalLString ap n = map pack (unmarshalLString' ap n)
 
 unmarshalBits : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
-unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + width) <= p_len)
+unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + (natToInt width)) <= p_len)
   | True = do
-    res <- foreignGetBits pckt pos (pos + width - 1)
+    res <- foreignGetBits pckt pos (pos + (natToInt width) - 1)
     putStrLn $ "Read: " ++ show res
-    return $ Just $ (BInt res (believe_me oh), width) -- Have to trust it, as it's from C
+    return $ Just $ (BInt res (believe_me oh), (natToInt width)) -- Have to trust it, as it's from C
   | False = putStrLn "Check failed in unmarshalBits" $> return Nothing
 
 unmarshalBool : ActivePacket -> IO (Maybe (Bool, Length))

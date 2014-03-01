@@ -127,7 +127,6 @@ validQCLASS i = (validCLASS i) || i == 255
 validOpcode : Int -> Bool
 validOpcode i = i == 0 || i == 1 || i == 2
 
-abstract
 nullterm : PacketLang
 nullterm = do nt <- bits 8
               check ((val nt) == 0)
@@ -138,7 +137,6 @@ validRespCode i = i >= 0 && i <= 5
 -- DNS allows compression in the form of references.
 -- These take the form of two octets, the first two bits of which 
 -- are 11. The rest is 14 bits.
-abstract -- This is junk, we don't really want it to reduce
 tagCheck : Int -> PacketLang
 tagCheck i = do tag1 <- bits 1
                 tag2 <- bits 1
@@ -173,7 +171,7 @@ dnsQuestion = do dnsDomain
                  qtype <- bits 16
                  check (validQTYPE (val qtype))
                  qclass <- bits 16 
-                 check (validQCLASS 16)
+                 check (validQCLASS (val qclass))
 
 dnsIP : PacketLang
 dnsIP = do
