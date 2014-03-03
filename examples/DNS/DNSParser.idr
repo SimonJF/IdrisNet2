@@ -283,27 +283,28 @@ parseDNS ptr len pckt = do
 
 -- data DNSEncodeError = SomeEncodeError
 
-
+data DNSEncodeError = OutOfBoundsError Nat Nat
+                    | ProofConstructionError String
+                    | LengthMismatchError Nat Nat
 
 -- Our old friend... Might be a better way of doing this
-lemma_vect_len : {x : Nat} -> (y : Nat) -> Vect x a -> Maybe (Vect y a)
+lemma_vect_len : {x : Nat} -> (y : Nat) -> Vect x a -> Either DNSEncodeError (Vect y a)
 lemma_vect_len {x} y xs with (decEq x y)
-  lemma_vect_len {x} x xs | (Yes refl) = Just xs
-  lemma_vect_len {x} y _  | (No _) = Nothing
+  lemma_vect_len {x} x xs | (Yes refl) = Right xs
+  lemma_vect_len {x} y _  | (No _) = Left $ LengthMismatchError x y
 
 ---encodeVectLen : (n : Nat) -> Bounded
 
-lemma_vect : {m : Nat} -> (xs : Vect n a) -> (y : Bounded m) -> Maybe (Vect (intToNat (val y)) a )
+lemma_vect : {m : Nat} -> (xs : Vect n a) -> (y : Bounded m) -> Either DNSEncodeError (Vect (intToNat (val y)) a )
 lemma_vect {m} xs b = lemma_vect_len (intToNat (val b)) xs  
 
-isBounded : (bound : Nat) -> Nat -> (Maybe (Bounded bound))
+isBounded : (bound : Nat) -> Nat -> Either DNSEncodeError (Bounded bound)
 isBounded b n = 
   case choose (i_n < (pow 2 b)) of
-      Left yes => Just (BInt i_n yes)
-      Right _ => Nothing
+      Left yes => Right (BInt i_n yes)
+      Right _ => Left $ OutOfBoundsError b n
   where i_n : Int 
         i_n = natToInt n
-
 
 
 zeroBit : Bounded 1
@@ -321,67 +322,66 @@ encodeString str =
   let vect_string = fromList unpacked_string in
   (_ ** vect_string)
 
---mkTagCheck0 : (mkTy (tagCheck 0))
---mkTagCheck0 = (zeroBit ## zeroBit ## (Yes refl) ## (Yes refl))
-
-{-
-mkTagCheck0 : (mkTy (tagCheck 0))
-mkTagCheck0 with (decEq (val zeroBit) 0)
-  mkTagCheck0 | Yes refl = (zeroBit ## zeroBit ## refl ## refl)
-  mkTagCheck0 | No refl impossible
---  mkTagCheck x 0 | No _ = (zeroBit ## zeroBit ## refl ## refl)
--}
-
 mkTagCheck0 : (mkTy (tagCheck 0))
 mkTagCheck0 = let zbit = zeroBit in
               (zbit ## zbit ## refl ## refl)
---mkTagCheck1 : (mkTy (tagCheck 1))
---mkTagCheck1 = (oneBit ## oneBit ## refl ## refl)
+
+mkTagCheck1 : (mkTy (tagCheck 1))
+mkTagCheck1 = let onebit = oneBit in
+              (onebit ## onebit ## refl ## refl)
 
 nullT : (mkTy nullterm)
 nullT = (b0 ## oh)
   where b0 : Bounded 8
         b0 = BInt 0 oh
 
-encodeDomainFragment : DomainFragment -> Maybe (mkTy dnsLabel)
+
+encodeDomainFragment : DomainFragment -> Either DNSEncodeError (mkTy dnsLabel)
 encodeDomainFragment frag = do
   let (len ** vect_string) = encodeString frag
   encoded_len <- isBounded 6 len
   case choose ((val encoded_len) /= 0) of
     Left prf => 
-      case lemma_vect vect_string encoded_len of
-        Just encoded_string' => Just (mkTagCheck0 ## encoded_len ## prf ## encoded_string') 
-        Nothing => Nothing
-    _ => Nothing
+      (lemma_vect vect_string encoded_len) >>= \encoded_string' =>
+        Right (mkTagCheck0 ## encoded_len ## prf ## encoded_string') 
+    Right _ => Left $ ProofConstructionError "Length of encoded domain fragment may not be zero"
 
-encodeDomain : List DomainFragment -> Maybe (mkTy dnsDomain)
+encodeDomain : List DomainFragment -> Either DNSEncodeError (mkTy dnsDomain)
 encodeDomain xs = do
   xs <- sequence $ map encodeDomainFragment xs
   return (Right (xs ## (Left nullT)))
 
 
-encodeQuestion : DNSQuestion -> Maybe (mkTy dnsQuestion)
+encodeQuestion : DNSQuestion -> Either DNSEncodeError (mkTy dnsQuestion)
 encodeQuestion (MkDNSQuestion qnames ty cls) = do
   dom <- encodeDomain qnames 
   b_ty_code <- isBounded 16 (intToNat $ dnsQTypeToCode ty)
   b_cls_code <- isBounded 16 (intToNat $ dnsQClassToCode cls) 
   case (choose (validQTYPE (val b_ty_code)), choose (validQCLASS (val b_cls_code))) of
-    (Left p1, Left p2) => Just (dom ## b_ty_code ## p1 ## b_cls_code ## p2)
-    _ => Nothing
+    (Left p1, Left p2) => Right (dom ## b_ty_code ## p1 ## b_cls_code ## p2)
+    (Right _, _) => Left $ ProofConstructionError ("Invalid qtype (qtype = " ++
+                            show (val b_ty_code) ++ ")")
+    (_, Right _) => Left $ ProofConstructionError ("Invalid qclass (qclass = " ++ 
+                            show (val b_cls_code) ++ ")")
 
 
-encodeHeader : DNSHeader -> Maybe (mkTy dnsHeader) 
+encodeHeader : DNSHeader -> Either DNSEncodeError (mkTy dnsHeader) 
 encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) = do
   b_id <- isBounded 16 (intToNat hdr_id)
   b_op <- isBounded 4 (intToNat $ dnsOpcodeToCode op)
   b_resp_code <- isBounded 4 (intToNat $ dnsResponseToCode resp)
   case (choose (validOpcode (val b_op)), choose (validRespCode (val b_resp_code))) of
     (Left op_prf, Left resp_prf) => 
-      Just (b_id ## query ## b_op ## op_prf ## auth ## trunc ## rd ## 
+      Right (b_id ## query ## b_op ## op_prf ## auth ## trunc ## rd ## 
             ra ## False ## oh ## aa ## naa ## b_resp_code ## resp_prf)
-    _ => Nothing
+    (Right _, _) => 
+      Left $ ProofConstructionError ("Invalid opcode (opcode = " ++ 
+                                        (show $ val b_op) ++ ")")
+    (_, Right _) => 
+      Left $ ProofConstructionError ("Invalid response code (resp code = " ++
+                                        (show $ val b_resp_code) ++ ")")
 
-encodeRR : DNSRecord -> Maybe (mkTy dnsRR)
+encodeRR : DNSRecord -> Either DNSEncodeError (mkTy dnsRR)
 encodeRR (MkDNSRecord name ty cls ttl rel pl) = do
   dom <- encodeDomain name
   b_ty_code <- isBounded 16 (intToNat $ dnsTypeToCode ty)
@@ -393,8 +393,15 @@ encodeRR (MkDNSRecord name ty cls ttl rel pl) = do
         choose (validCLASS $ val b_cls_code), 
         choose (((val b_len) * 8) > 0)) of
     (Left ty_prf, Left cls_prf, Left len_prf) => 
-      Just (dom ## b_ty_code ## ty_prf ## b_cls_code ## cls_prf ## b_ttl ## b_len ## len_prf ## ?mv_payload)
-    _ => Nothing
+      Right (dom ## b_ty_code ## ty_prf ## b_cls_code ## cls_prf ## b_ttl ## b_len ## len_prf ## ?mv_payload)
+    (Right _, _, _) => 
+      Left $ ProofConstructionError ("Invalid type code (type = " ++ 
+                                        (show (val b_ty_code)) ++ ")")
+    (_, Right _, _) => 
+      Left $ ProofConstructionError ("Invalid class code (class code = " ++
+                                        (show (val b_cls_code)) ++ ")")
+    (_, _, Right _) => 
+      Left $ ProofConstructionError "Payload length field may not be zero"
 
 {-
 encodeDNS : DNSPacket -> Maybe (mkTy dns)
