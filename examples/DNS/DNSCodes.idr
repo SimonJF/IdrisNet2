@@ -71,6 +71,10 @@ dnsClassToRel {code = 4} DNSClassHS = DNSClassRelHS
 dnsCodeToClass : (code : Int) -> Maybe DNSClass
 dnsCodeToClass 1 = Just DNSClassIN
 dnsCodeToClass _ = Nothing
+
+dnsClassToCode : DNSClass -> Int
+dnsClassToCode DNSClassIN = 1
+
 {-
 dnsCodeToClass {cls = DNSClassCS} 2 = Just DNSClassRelCS
 dnsCodeToClass {cls = DNSClassCH} 3 = Just DNSClassRelCH
@@ -378,6 +382,14 @@ dnsCodeToResponse 3 = Just DNSResponseNameError
 dnsCodeToResponse 4 = Just DNSResponseNotImplementedError
 dnsCodeToResponse 5 = Just DNSResponseRefusedError
 dnsCodeToResponse _ = Nothing
+
+
+dnsResponseToCode : DNSResponse -> Int
+dnsResponseToCode DNSResponseNoError = 0
+dnsResponseToCode DNSResponseFormatError = 1
+dnsResponseToCode DNSResponseServerError = 2
+dnsResponseToCode DNSResponseNameError = 3
+dnsResponseToCode DNSResponseNotImplementedError = 4
 
 
 DomainFragment : Type

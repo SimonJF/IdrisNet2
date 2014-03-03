@@ -305,11 +305,6 @@ isBounded b n =
         i_n = natToInt n
 
 
-encodeHeader : DNSHeader -> (mkTy dnsHeader) 
-encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) =  ?encodeHeader_rhs
-
-encodeRR : DNSRecord -> (mkTy dnsRR)
-encodeRR (MkDNSRecord name ty cls ttl rel pl) = ?encodeRR_rhs
 
 zeroBit : Bounded 1
 zeroBit = BInt 0 oh
@@ -373,6 +368,34 @@ encodeQuestion (MkDNSQuestion qnames ty cls) = do
   case (choose (validQTYPE (val b_ty_code)), choose (validQCLASS (val b_cls_code))) of
     (Left p1, Left p2) => Just (dom ## b_ty_code ## p1 ## b_cls_code ## p2)
     _ => Nothing
+
+
+encodeHeader : DNSHeader -> Maybe (mkTy dnsHeader) 
+encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) = do
+  b_id <- isBounded 16 (intToNat hdr_id)
+  b_op <- isBounded 4 (intToNat $ dnsOpcodeToCode op)
+  b_resp_code <- isBounded 4 (intToNat $ dnsResponseToCode resp)
+  case (choose (validOpcode (val b_op)), choose (validRespCode (val b_resp_code))) of
+    (Left op_prf, Left resp_prf) => 
+      Just (b_id ## query ## b_op ## op_prf ## auth ## trunc ## rd ## 
+            ra ## False ## oh ## aa ## naa ## b_resp_code ## resp_prf)
+    _ => Nothing
+
+encodeRR : DNSRecord -> Maybe (mkTy dnsRR)
+encodeRR (MkDNSRecord name ty cls ttl rel pl) = do
+  dom <- encodeDomain name
+  b_ty_code <- isBounded 16 (intToNat $ dnsTypeToCode ty)
+  b_cls_code <- isBounded 16 (intToNat $ dnsClassToCode cls)
+  b_ttl <- isBounded 32 (intToNat ttl)
+  b_len <- isBounded 16 100 -- This could be problematic... It would be nice to have this invariant encoded in the packetlang actually.
+--  encoded_pl <- ?mv
+  case (choose (validTYPE $ val b_ty_code), 
+        choose (validCLASS $ val b_cls_code), 
+        choose (((val b_len) * 8) > 0)) of
+    (Left ty_prf, Left cls_prf, Left len_prf) => 
+      Just (dom ## b_ty_code ## ty_prf ## b_cls_code ## cls_prf ## b_ttl ## b_len ## len_prf ## ?mv_payload)
+    _ => Nothing
+
 {-
 encodeDNS : DNSPacket -> Maybe (mkTy dns)
 encodeDNS (MkDNS hdr qc ac nsc arc qs as auths ars) = do
