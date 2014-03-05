@@ -281,11 +281,11 @@ parseDNS ptr len pckt = do
   finalise
   return res
 
--- data DNSEncodeError = SomeEncodeError
-
 data DNSEncodeError = OutOfBoundsError Nat Nat
                     | ProofConstructionError String
                     | LengthMismatchError Nat Nat
+                    | UnsupportedPayloadType 
+                    | InternalEncodeError String
 
 -- Our old friend... Might be a better way of doing this
 lemma_vect_len : {x : Nat} -> (y : Nat) -> Vect x a -> Either DNSEncodeError (Vect y a)
@@ -381,6 +381,56 @@ encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) = do
       Left $ ProofConstructionError ("Invalid response code (resp code = " ++
                                         (show $ val b_resp_code) ++ ")")
 
+encodeIP : DNSPayload DNSIPv4 -> Either DNSEncodeError (mkTy dnsIP)
+encodeIP (DNSIPv4Payload (IPv4Addr i1 i2 i3 i4)) = do
+  i1' <- isBounded 8 (intToNat i1)
+  i2' <- isBounded 8 (intToNat i2)
+  i3' <- isBounded 8 (intToNat i3)
+  i4' <- isBounded 8 (intToNat i4)
+  return (i1' ## i2' ## i3' ## i4')
+-- TODO: If we parameterised SocketAddress over its type, we wouldn't have to do this.
+encodeIP _ = Left $ InternalEncodeError "Attempted to encode ipv6 address using ipv4 function"
+
+encodePayload : (rel : DNSPayloadRel ty cls pl_ty) -> 
+                (ty_rel : DNSTypeRel ty_code ty) ->
+                (cls_rel : DNSClassRel cls_code cls) ->
+                (payload : DNSPayload pl_ty) ->
+                Either DNSEncodeError (mkTy (dnsPayloadLang ty_code cls_code))
+--encodePayload {ty_code} {cls_code} rel ty_rel cls_rel = ?mv
+encodePayload DNSPayloadRelIP DNSTypeRelA DNSClassRelIN payload = encodeIP payload
+encodePayload DNSPayloadRelIP6 DNSTypeRelAAAA DNSClassRelIN payload = Left UnsupportedPayloadType
+encodePayload DNSPayloadRelCNAME DNSTypeRelCNAME DNSClassRelIN (DNSDomainPayload payload) = encodeDomain payload
+encodePayload DNSPayloadRelNS DNSTypeRelNS DNSClassRelIN (DNSDomainPayload payload) = encodeDomain payload
+encodePayload _ _ _ _ = Left UnsupportedPayloadType
+
+getEncodeRelations : (ty_code : Bounded 16) -> 
+                     (cls_code : Bounded 16) -> 
+                     (ty : DNSType) -> 
+                     (cls : DNSClass) -> 
+                     (pl_ty : DNSPayloadType) ->
+                     Either DNSEncodeError (DNSTypeRel (val ty_code) ty, 
+                                            DNSClassRel (val cls_code) cls,
+                                            DNSPayloadRel ty cls pl_ty)
+getEncodeRelations tc cc ty cls pl_ty = 
+  case (dnsTypeRel (val tc) ty, 
+        dnsClassRel (val cc) cls, 
+        getPayloadRel pl_ty ty cls) of
+    (Just tr, Just cr, Just pr) => Right (tr, cr, pr)
+    _ => Left $ InternalEncodeError "Nonexistent relation"
+
+
+getEncodePayloadType : Bounded 16 -> Bounded 16 -> Either DNSEncodeError (DNSType, DNSClass, DNSPayloadType)
+getEncodePayloadType b_ty b_cls = 
+    case getEncodePayloadType' b_ty b_cls of
+      Just (ty, cls, pl_ty) => Right (ty, cls, pl_ty)
+      Nothing => Left UnsupportedPayloadType
+  where getEncodePayloadType' : Bounded 16 -> Bounded 16 -> Maybe (DNSType, DNSClass, DNSPayloadType)
+        getEncodePayloadType' b_ty b_cls = do
+          ty <- dnsCodeToType (val b_ty)
+          cls <- dnsCodeToClass (val b_ty)
+          pl_ty <- payloadType ty cls
+          return (ty, cls, pl_ty)
+
 encodeRR : DNSRecord -> Either DNSEncodeError (mkTy dnsRR)
 encodeRR (MkDNSRecord name ty cls ttl rel pl) = do
   dom <- encodeDomain name
@@ -388,12 +438,15 @@ encodeRR (MkDNSRecord name ty cls ttl rel pl) = do
   b_cls_code <- isBounded 16 (intToNat $ dnsClassToCode cls)
   b_ttl <- isBounded 32 (intToNat ttl)
   b_len <- isBounded 16 100 -- This could be problematic... It would be nice to have this invariant encoded in the packetlang actually.
---  encoded_pl <- ?mv
+  -- We might have to encode this in a separate step, getting the relation between our bounded reps and ty & cls, then use that in getting the pl_ty
+  (ty', cls', pl_ty) <- getEncodePayloadType b_ty_code b_cls_code
+  (ty_rel, cls_rel, pl_rel) <- getEncodeRelations b_ty_code b_cls_code ty' cls' pl_ty  
+  encoded_pl <- encodePayload pl_rel ty_rel cls_rel pl
   case (choose (validTYPE $ val b_ty_code), 
         choose (validCLASS $ val b_cls_code), 
         choose (((val b_len) * 8) > 0)) of
     (Left ty_prf, Left cls_prf, Left len_prf) => 
-      Right (dom ## b_ty_code ## ty_prf ## b_cls_code ## cls_prf ## b_ttl ## b_len ## len_prf ## ?mv_payload)
+      Right (dom ## b_ty_code ## ty_prf ## b_cls_code ## cls_prf ## b_ttl ## b_len ## len_prf ## encoded_pl ) -- encoded_pl)
     (Right _, _, _) => 
       Left $ ProofConstructionError ("Invalid type code (type = " ++ 
                                         (show (val b_ty_code)) ++ ")")
