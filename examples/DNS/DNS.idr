@@ -142,8 +142,8 @@ tagCheck i = do tag1 <- bits 1
                 tag2 <- bits 1
                 let v1 = val tag1
                 let v2 = val tag2
-                prop_eq v1 i
-                prop_eq v2 i
+                prop (prop_eq v1 i)
+                prop (prop_eq v2 i)
 
 dnsReference : PacketLang
 dnsReference = do tagCheck 1
@@ -230,7 +230,6 @@ dnsRR = with PacketLang do
            let vl = ((val len) * 8)
            prf <- check (vl > 0)
            dnsPayloadLang vt vc
---           bounded_bits vl prf
 
 dns : PacketLang
 dns = with PacketLang do 

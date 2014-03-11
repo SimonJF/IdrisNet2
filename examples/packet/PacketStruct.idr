@@ -11,7 +11,8 @@ simpleStruct = do
   listn 3 cstring
   b1 <- bool
   b2 <- bool
-  prop_or (P_BOOL b2) (P_BOOL b1) -- FIXME
+  prop (prop_or (prop (prob_bool b2)) 
+                (prop (prop_bool b1))) 
   -- CHUNK (Prop (P_OR (P_BOOL b2) (P_BOOL b1)))
   -- CHUNK (Prop (P_OR (P_BOOL b2) (P_BOOL b1)))
 

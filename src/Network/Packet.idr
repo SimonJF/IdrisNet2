@@ -198,7 +198,7 @@ unmarshalProp (P_BOOL b) =
 unmarshalProp (P_AND prop1 prop2) = do
   p1 <- unmarshalProp prop1
   p2 <- unmarshalProp prop2
-  Just (MkBoth prop1 prop2 p1 p2)
+  Just (MkBoth p1 p2)
 unmarshalProp (P_OR p1 p2) = unsafePerformIO $ 
   maybe (maybe (putStrLn "P_OR failed" >>= \_ => return Nothing) 
                     (\p2' => return $ Just (Right p2')) (unmarshalProp p2))
