@@ -71,7 +71,6 @@ marshalChunk (ActivePacketRes pckt pos p_len) CString str = do
   --putStrLn $ "CStr length: " ++ (show len)
   foreignSetString pckt pos str len '\0'
   return len
--- TODO: This is wrong, need to set the length in there explicitly
 marshalChunk (ActivePacketRes pckt pos p_len) (LString n) str = do
   let len = chunkLength (LString n) str 
   foreignSetString pckt pos str len '\0'
@@ -234,7 +233,7 @@ unmarshalList (ActivePacketRes pckt pos p_len) pl =
         let (rest, rest_len) = unmarshalList (ActivePacketRes pckt (pos + len) p_len) pl in
 --        let (rest, rest_len) = (fst xs_tup, snd xs_tup) in
           (item :: rest, len + rest_len)
-      Nothing => unsafePerformIO $ putStrLn "finished parsing list" $> return ([], 0) -- Finished parsing list
+      Nothing => ([], 0) -- Finished parsing list
 
 
 
@@ -244,10 +243,8 @@ unmarshalVect : ActivePacket ->
                 Maybe ((Vect len (mkTy pl)), Length)
 unmarshalVect _ _ Z = Just ([], 0)
 unmarshalVect (ActivePacketRes pckt pos p_len) pl (S k) = do
-  item_tup <- unmarshal' (ActivePacketRes pckt pos p_len) pl 
-  let (item, len) = (fst item_tup, snd item_tup)
-  rest_tup <- unmarshalVect (ActivePacketRes pckt (pos + len) p_len) pl k
-  let (rest, rest_len) = (fst rest_tup, snd rest_tup)
+  (item, len) <- unmarshal' (ActivePacketRes pckt pos p_len) pl 
+  (rest, rest_len) <- unmarshalVect (ActivePacketRes pckt (pos + len) p_len) pl k
   return (item :: rest, len + rest_len)
 
 -- unmarshal' : ActivePacket -> (pl : PacketLang) -> Maybe (mkTy pl, Length)
@@ -264,19 +261,13 @@ unmarshal' ap (x // y) = do
        Just (pckt, len) => Just (Left pckt, len)
        Nothing => case (unmarshal' ap y) of
                     Just (pckt, len) => Just (Right pckt, len)
-                    Nothing => unsafePerformIO $ putStrLn "either failed" >>= \_ => return Nothing
-                    -- map (\(pckt, len) => (Right pckt, len)) (unmarshal' ap y)
---  (maybe (maybe Nothing (\(y_res', len) => Just $ (Right y_res', len)) y_res)
-  --       (\(x_res', len) => Just $ (Left x_res', len)) x_res)
-unmarshal' ap (LIST pl) = unsafePerformIO $ putStrLn "Parsing list outer \n" >>= \_ => return $ Just (unmarshalList ap pl)
+                    Nothing => Nothing
+unmarshal' ap (LIST pl) = Just (unmarshalList ap pl)
 unmarshal' ap (LISTN n pl) = unmarshalVect ap pl n
 unmarshal' ap NULL = Just ((), 0)
 unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
-  res1_tup <- unmarshal' (ActivePacketRes pckt pos p_len) c 
-  -- Hack hack hack around the TC resolution bug...
-  let (res, res_len) = (fst res1_tup, snd res1_tup)
-  res2_tup <- unmarshal' (ActivePacketRes pckt (pos + res_len) p_len) (k res) 
-  let (res2, res2_len) = (fst res2_tup, snd res2_tup)
+  (res, res_len) <- unmarshal' (ActivePacketRes pckt pos p_len) c 
+  (res2, res2_len) <- unmarshal' (ActivePacketRes pckt (pos + res_len) p_len) (k res) 
   return ((res ** res2), res_len + res2_len)
 
 

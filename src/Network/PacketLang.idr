@@ -155,13 +155,13 @@ bit w {p} = Bit w p
 
 -- PacketLang DSL syntax
 syntax bits [n] = (CHUNK (bit n))
-syntax check [p] = (CHUNK (Prop (P_BOOL p)))
+syntax check [b] = (CHUNK (Prop (P_BOOL b)))
 syntax lstring [n] = (CHUNK (LString n))
 syntax cstring = (CHUNK (CString))
 syntax listn [n] [t] = (LISTN n t)
 syntax list [t] = (LIST t)
-syntax p_if [p] then [t] else [e] = (IF p t e)
-syntax p_either [c1] [c2] = (c1 // c2)
+syntax p_if [b1] then [b2] else [b3] = (IF b1 b2 b3)
+syntax p_either [t1] [t2] = (t1 // t2)
 syntax bool = (CHUNK (CBool))
 syntax prop [p] = (CHUNK (Prop p))
 syntax null = NULL
