@@ -151,38 +151,35 @@ unmarshalCString (ActivePacketRes pckt pos p_len) = do
   res <- unmarshalCString' (ActivePacketRes pckt pos p_len) 0
   case res of 
        Just (chrs, len) => return $ Just (pack chrs, len) 
-       Nothing => putStrLn "unmarshal C string failed" $> return Nothing
+       Nothing => return Nothing
 
--- TODO: Maybe recurse using Nat instead of Int (for sake of totality) but we need to use as an Int
-unmarshalLString' : ActivePacket -> Int -> IO (List Char)
-unmarshalLString' ap 0 = return []
-unmarshalLString' (ActivePacketRes pckt pos p_len) n = do
+unmarshalLString' : ActivePacket -> Nat -> IO (List Char)
+unmarshalLString' ap Z = return []
+unmarshalLString' (ActivePacketRes pckt pos p_len) (S k) = do
   next_byte <- foreignGetBits pckt pos (pos + 7)
   let char = chr next_byte
-  rest <- unmarshalLString' (ActivePacketRes pckt (pos + 8) p_len) (n - 1)
+  rest <- unmarshalLString' (ActivePacketRes pckt (pos + 8) p_len) k
   return $ (char :: rest)
 
 -- We've already bounds-checked the LString against the packet length,
 -- meaning it's safe to just return a string.
-unmarshalLString : ActivePacket -> Int -> IO String
+unmarshalLString : ActivePacket -> Nat -> IO String
 unmarshalLString ap n = map pack (unmarshalLString' ap n)
 
 unmarshalBits : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
 unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + (natToInt width)) <= p_len)
   | True = do
     res <- foreignGetBits pckt pos (pos + (natToInt width) - 1)
-    putStrLn $ "Read: " ++ show res
+   --  putStrLn $ "Read: " ++ show res
     return $ Just $ (BInt res (believe_me oh), (natToInt width)) -- Have to trust it, as it's from C
-  | False = putStrLn "Check failed in unmarshalBits" $> return Nothing
+  | False = return Nothing
 
 unmarshalBool : ActivePacket -> IO (Maybe (Bool, Length))
 unmarshalBool (ActivePacketRes pckt pos p_len) with ((pos + 1) <= p_len)
   | True = do
       res <- foreignGetBits pckt pos pos
-      let result = (res == 1)
-      putStrLn $ "Read bool: " ++ show result
-      return $ Just (result, 1)
-  | False = putStrLn "Unmarshal bool failed" $> return Nothing
+      return $ Just (res == 1, 1)
+  | False = return Nothing
 
 unmarshalProp : (p : Proposition) -> Maybe (propTy p)
 unmarshalProp (P_EQ x y) = 
@@ -211,11 +208,11 @@ unmarshalChunk ap CBool = unmarshalBool ap
 unmarshalChunk ap CString = unmarshalCString ap
 unmarshalChunk (ActivePacketRes pckt pos p_len) (LString n) =
   -- Do bounds checking now, if it passes then we're golden later on
-  if pos + (8 * n) <= p_len then do
+  if pos + (8 * (natToInt n)) <= p_len then do
     res <- unmarshalLString (ActivePacketRes pckt pos p_len) n
-    return $ Just (res, (8 * n))
+    return $ Just (res, (8 * (natToInt n)))
   else do
-    putStrLn "Check failed in unmarshal LString"
+ --   putStrLn "Check failed in unmarshal LString"
     return Nothing
 unmarshalChunk _ (Prop p) = 
   case unmarshalProp p of

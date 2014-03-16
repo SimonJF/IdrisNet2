@@ -53,7 +53,7 @@ data Chunk : Type where
   -- Native C String, null terminated
   CString : Chunk
   -- String with fixed bounded length
-  LString : Int -> Chunk
+  LString : Nat -> Chunk
   -- String with dynamic bounded length
   --LString : ((length s) ** (s : String)) -> Chunk
   -- Proposition about data
@@ -122,7 +122,7 @@ chunkLength CBool _ = 1
 -- within the string itself. I had something nice using span earlier,
 -- but it didn't work (probably due to a library bug)
 chunkLength CString str = 8 * ((strLen str) + 1) 
-chunkLength (LString len) str = 8 * len 
+chunkLength (LString len) str = 8 * (natToInt len)
 chunkLength (Prop _) p = 0 -- Not written to the packet
 
 listLength : (pl : PacketLang) -> List (mkTy pl) -> Length
