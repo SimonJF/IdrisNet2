@@ -195,11 +195,11 @@ unmarshalProp (P_AND prop1 prop2) = do
   p1 <- unmarshalProp prop1
   p2 <- unmarshalProp prop2
   Just (MkBoth p1 p2)
-unmarshalProp (P_OR p1 p2) = unsafePerformIO $ 
-  maybe (maybe (putStrLn "P_OR failed" >>= \_ => return Nothing) 
-                    (\p2' => return $ Just (Right p2')) (unmarshalProp p2))
-                    (\p1' => return $ Just (Left p1')) (unmarshalProp p1)
-unmarshalProp (P_LT x y) = unsafePerformIO $ putStrLn "LT!?" >>= \_ => return Nothing -- TODO
+unmarshalProp (P_OR p1 p2) =
+  maybe (maybe Nothing 
+                    (\p2' => Just (Right p2')) (unmarshalProp p2))
+                    (\p1' => Just (Left p1')) (unmarshalProp p1)
+unmarshalProp (P_LT x y) = Nothing -- TODO
 
 
 unmarshalChunk : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))

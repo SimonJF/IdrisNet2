@@ -8,7 +8,7 @@ mutual
   recvAndPrint len = do 
     recv_res <- tcpRecv len
     case recv_res of
-      OperationSuccess (str, len) => do lift' (putStr ("Received: " ++ str ++ "\n"))
+      OperationSuccess (str, len) => do putStr ("Received: " ++ str ++ "\n")
                                         getAndSend
       RecoverableError _ => recvAndPrint len
       FatalError _       => tcpFinalise
@@ -19,9 +19,9 @@ mutual
   getAndSend = do
     input <- getStr
     if (input == "bye!\n") then 
-       (lift' (do tcpClose 
-                  Effects.return ())) 
-    else (do
+      do tcpClose 
+         return ()
+    else do
       tcp_res <- tcpSend input
       case tcp_res of
            OperationSuccess len => recvAndPrint 1024
@@ -43,4 +43,4 @@ echoClient sa port = do
                           return ()
 
 main : IO ()
-main = runInit [(), ()] (echoClient (IPv4Addr 127 0 0 1) 1234)
+main = run (echoClient (IPv4Addr 127 0 0 1) 1234)
