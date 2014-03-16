@@ -14,70 +14,66 @@ echo : String -> { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
 
 
 receive' = do
-  recv_res <- tcpRecv 1024
-  case recv_res of
-    OperationSuccess (str, len) => echo str
-    RecoverableError _ => receive'
-    FatalError err => putStr ("Error receiving: " ++ (show err)) >>= (\_ => finaliseClient)
-    ConnectionClosed => return ()
-
---receive : ClientProgram ()
---echo : String -> ClientProgram ()
+  OperationSuccess (str, len) <- tcpRecv 1024
+    | RecoverableError _ => receive'
+    | FatalError err => do putStr ("Error receiving: " ++ (show err)) 
+                           finaliseClient
+    | ConnectionClosed => return ()
+  echo str
+  
 
 echo str = do
-  send_res <- tcpSend str
-  case send_res of
-    OperationSuccess _ => receive'
-    RecoverableError _ => echo str
-    FatalError err => putStr ("Error sending: " ++ (show err)) >>= (\_ => finaliseClient)
-    ConnectionClosed => return ()
+  OperationSuccess _ <- tcpSend str
+    | RecoverableError _ => echo str
+    | FatalError err => do putStr ("Error sending: " ++ (show err)) 
+                           finaliseClient
+    | ConnectionClosed => return ()
+  receive'
 
 receive : ClientProgram ()
-receive = new () receive'
+receive = new receive'
 
 forkServerLoop : { [TCPSERVER (ServerListening), STDIO] ==>
                [TCPSERVER (), STDIO] } Eff IO ()
 forkServerLoop = do
   -- Accept, and perform the "receive" program with the new socket.
-  accept_res <- forkAccept receive
-  case accept_res of
-       OperationSuccess _ => forkServerLoop
-       RecoverableError _ => forkServerLoop
-       FatalError err => putStr ("Error accepting: " ++ (show err)) >>= (\_ => finaliseServer)
-       ConnectionClosed => return ()
+  OperationSuccess _ <- forkAccept receive
+       | RecoverableError _ => forkServerLoop
+       | FatalError err => do putStr ("Error accepting: " ++ (show err)) 
+                              finaliseServer
+       | ConnectionClosed => return ()
+  forkServerLoop
 
 serverLoop : { [TCPSERVER (ServerListening), STDIO] ==>
                [TCPSERVER (), STDIO] } Eff IO ()
 serverLoop = do
   -- Accept, and perform the "receive" program with the new socket.
-  accept_res <- accept receive
-  case accept_res of
-       OperationSuccess _ => serverLoop
-       RecoverableError _ => serverLoop
-       FatalError err => putStr ("Error accepting: " ++ (show err)) >>= (\_ => finaliseServer)
-       ConnectionClosed => return ()
+  OperationSuccess _ <- accept receive
+    | RecoverableError _ => serverLoop
+    | FatalError err => do putStr ("Error accepting: " ++ (show err)) 
+                           finaliseServer
+    | ConnectionClosed => return ()
+  serverLoop
 
 setupServer : SocketAddress -> Port -> Bool ->
               { [TCPSERVER (), STDIO] ==>
                 [TCPSERVER (), STDIO] } Eff IO ()
 setupServer sa port do_fork = do
   putStr "Binding\n" 
-  bind_res <- bind sa port
-  case bind_res of
-    OperationSuccess _ => do
-      putStr "Bound\n"
-      listen_res <- listen
-      case listen_res of
-           OperationSuccess _ => do
-             putStr "Listening\n"
-             if do_fork then forkServerLoop else serverLoop
-           RecoverableError err => putStr ("Recoverable error: " ++ (show err)) >>= (\_ => closeBound)
-           FatalError err => putStr ("Error binding: " ++ show err) >>= (\_ => finaliseServer)
-           ConnectionClosed => return ()
-    RecoverableError _ => return ()
-    FatalError err => do putStr ("Error binding: " ++ (show err) ++ "\n") 
-                         return ()
-    ConnectionClosed => return ()
+  OperationSuccess _ <- bind sa port
+    | RecoverableError _ => return ()
+    | FatalError err => do putStr ("Error binding: " ++ (show err) ++ "\n") 
+                           return ()
+    | ConnectionClosed => return ()
+  putStr "Bound\n"
+  OperationSuccess _ <- listen
+    | RecoverableError err => do putStr ("Recoverable error: " ++ (show err)) 
+                                 closeBound
+    | FatalError err => do putStr ("Error binding: " ++ show err) 
+                           finaliseServer
+    | ConnectionClosed => return ()
+  putStr "Listening\n"
+  if do_fork then forkServerLoop else serverLoop
 
 
 main : IO ()
