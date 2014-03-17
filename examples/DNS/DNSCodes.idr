@@ -1,5 +1,6 @@
 module DNSCodes
 import Network.Socket
+import Network.PacketLang
 
 %access public
 
@@ -74,6 +75,13 @@ dnsCodeToClass _ = Nothing
 
 dnsClassToCode : DNSClass -> Int
 dnsClassToCode DNSClassIN = 1
+
+dnsCodeToClass' : Bounded 16 -> Maybe DNSClass
+dnsCodeToClass' (BInt 1 oh) = Just DNSClassIN
+dnsCodeToClass' _ = Nothing
+
+dnsClassToCode' : DNSClass -> Bounded 16
+dnsClassToCode' DNSClassIN = BInt 1 oh
 
 {-
 dnsCodeToClass {cls = DNSClassCS} 2 = Just DNSClassRelCS
@@ -242,6 +250,16 @@ data DNSQTypeRel : Int -> DNSQType -> Type where
 --  DNSQTypeRelHINFO : DNSQTypeRel 13 DNSQTypeHINFO
 --  DNSQTypeRelMINFO : DNSQTypeRel 14 DNSQTypeMINFO
 
+dnsTypeToCode' : DNSType -> Bounded 16
+dnsTypeToCode' DNSTypeA = (BInt 1 oh)
+dnsTypeToCode' DNSTypeNS = (BInt 2 oh) 
+dnsTypeToCode' DNSTypeCNAME = (BInt 5 oh)
+dnsTypeToCode' DNSTypeNULL = (BInt 10 oh)
+dnsTypeToCode' DNSTypePTR = (BInt 12 oh)
+dnsTypeToCode' DNSTypeMX = (BInt 15 oh)
+dnsTypeToCode' DNSTypeTXT = (BInt 16 oh)
+dnsTypeToCode' DNSTypeAAAA = (BInt 28 oh)
+
 dnsTypeToCode : DNSType -> Int
 dnsTypeToCode DNSTypeA = 1
 dnsTypeToCode DNSTypeNS = 2
@@ -251,6 +269,18 @@ dnsTypeToCode DNSTypePTR = 12
 dnsTypeToCode DNSTypeMX = 15
 dnsTypeToCode DNSTypeTXT = 16
 dnsTypeToCode DNSTypeAAAA = 28
+
+
+dnsCodeToType' : (Bounded 16) -> Maybe DNSType
+dnsCodeToType' (BInt 1 oh) = Just DNSTypeA
+dnsCodeToType' (BInt 2 oh) = Just DNSTypeNS
+dnsCodeToType' (BInt 5 oh) = Just DNSTypeCNAME
+dnsCodeToType' (BInt 10 oh) = Just DNSTypeNULL
+dnsCodeToType' (BInt 12 oh) = Just DNSTypePTR
+dnsCodeToType' (BInt 15 oh) = Just DNSTypeMX
+dnsCodeToType' (BInt 16 oh) = Just DNSTypeTXT
+dnsCodeToType' (BInt 28 oh) = Just DNSTypeAAAA
+dnsCodeToType' (BInt _ oh) = Nothing
 
 
 dnsCodeToType : (code : Int) -> Maybe DNSType
@@ -439,7 +469,6 @@ payloadType DNSTypeAAAA DNSClassIN = Just DNSIPv6
 payloadType DNSTypeNS DNSClassIN =  Just DNSDomain
 payloadType DNSTypeCNAME DNSClassIN = Just DNSDomain
 payloadType _ _ = Nothing
-
 
 {-
 getPayloadRel' : (ty_rel : DNSTypeRel ty_code ty) ->

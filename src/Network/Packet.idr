@@ -75,8 +75,13 @@ marshalChunk (ActivePacketRes pckt pos p_len) (LString n) str = do
   let len = chunkLength (LString n) str 
   foreignSetString pckt pos str len '\0'
   return len
+marshalChunk (ActivePacketRes pckt pos p_len) (Decodable n t _ encode_fn) to_encode = do
+  let code = encode_fn to_encode
+  let len = natToInt n
+  foreignSetBits pckt pos (pos + len - 1) (val code)
+  return len
+
 marshalChunk (ActivePacketRes pckt pos p_len) (Prop _) x2 = return 0 -- We're not doing anything
-  
   
 marshalList : ActivePacket -> (pl : PacketLang) -> List (mkTy pl) -> IO Length
 marshalVect : ActivePacket -> (pl : PacketLang) -> Vect n (mkTy pl) -> IO Length
@@ -214,6 +219,15 @@ unmarshalChunk (ActivePacketRes pckt pos p_len) (LString n) =
   else do
  --   putStrLn "Check failed in unmarshal LString"
     return Nothing
+unmarshalChunk (ActivePacketRes pckt pos p_len) (Decodable n t decode_fn _) = do
+  let len = natToInt n
+  let end_pos = (pos + len)
+  if (end_pos <= p_len) then do
+    dat <- foreignGetBits pckt pos (end_pos - 1) 
+    case (decode_fn (BInt dat (believe_me oh))) of -- Decode using supplied fn
+      Just decoded_val => return $ Just (decoded_val, len)
+      Nothing => return Nothing
+  else return Nothing -- Out of bounds
 unmarshalChunk _ (Prop p) = 
   case unmarshalProp p of
        Just p' => return $ Just (p', 0)

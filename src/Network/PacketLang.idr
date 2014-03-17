@@ -61,6 +61,10 @@ data Chunk : Type where
   -- Custom chunk of binary data.
   -- Can be used to make cleverer things without having
   -- to add to the core PL each time.
+  Decodable : (n : Nat) -> 
+              (t : Type) -> 
+              (Bounded n -> Maybe t) -> 
+              (t -> Bounded n) -> Chunk
 
 infixl 5 //
 --infixl 5 ##
@@ -88,6 +92,7 @@ chunkTy CString = String
 chunkTy (LString i) = String
 chunkTy (Prop p) = propTy p
 chunkTy (CBool) = Bool
+chunkTy (Decodable n t encode_fn decode_fn) = t
 
 -- Packet Language
 mutual
@@ -124,6 +129,7 @@ chunkLength CBool _ = 1
 chunkLength CString str = 8 * ((strLen str) + 1) 
 chunkLength (LString len) str = 8 * (natToInt len)
 chunkLength (Prop _) p = 0 -- Not written to the packet
+chunkLength (Decodable n _ _ _) _ = natToInt n
 
 listLength : (pl : PacketLang) -> List (mkTy pl) -> Length
 listLength pl [] = 0
@@ -165,7 +171,7 @@ syntax p_either [t1] [t2] = (t1 // t2)
 syntax bool = (CHUNK (CBool))
 syntax prop [p] = (CHUNK (Prop p))
 syntax null = NULL
-
+syntax decodable [n] [ty] [fn1] [fn2] = (CHUNK (Decodable n ty fn1 fn2))
 -- Propositions
 syntax prop_bool [p] = (P_BOOL p)
 syntax prop_or [p1] [p2] = (P_OR p1 p2)

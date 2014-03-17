@@ -195,6 +195,16 @@ dnsPayloadLang 5 1 = dnsDomain
 dnsPayloadLang 28 1 = null
 dnsPayloadLang _ _ = null
 
+
+payloadType' : DNSType -> DNSClass -> PacketLang
+payloadType' DNSTypeA DNSClassIN = dnsIP
+payloadType' DNSTypeAAAA DNSClassIN = null 
+payloadType' DNSTypeNS DNSClassIN = dnsDomain
+payloadType' DNSTypeCNAME DNSClassIN = dnsDomain
+payloadType' _ _ = null
+
+
+
 -- abstract
 dnsHeader : PacketLang
 dnsHeader = 
@@ -219,17 +229,13 @@ dnsHeader =
 dnsRR : PacketLang
 dnsRR = with PacketLang do 
            domain <- dnsDomain
-           ty <- bits 16
-           let vt = val ty
-           check (validTYPE vt)
-           cls <- bits 16
-           let vc = val cls
-           check (validCLASS vc)
+           ty <- decodable 16 DNSType dnsCodeToType' dnsTypeToCode'
+           cls <- decodable 16 DNSClass dnsCodeToClass' dnsClassToCode' 
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
            let vl = ((val len) * 8)
            prf <- check (vl > 0)
-           dnsPayloadLang vt vc
+           payloadType' ty cls
 
 dns : PacketLang
 dns = with PacketLang do 
