@@ -3,33 +3,27 @@ import Effects
 import Network.TCP.TCPClient
 import Effect.StdIO
 
-recvAndPrint : ByteLength -> 
+clientLoop : ByteLength -> 
                { [TCPCLIENT (ClientConnected), STDIO] ==> 
                  [TCPCLIENT (), STDIO]} 
                Eff IO ()
-getAndSend : { [TCPCLIENT (ClientConnected), STDIO] ==> 
-               [TCPCLIENT (), STDIO]} 
-              Eff IO ()
-  
-recvAndPrint len = do 
-  OperationSuccess (str, len) <- tcpRecv len
-    | RecoverableError _ => recvAndPrint len
-    | FatalError _ => tcpFinalise
+clientLoop len = do
+  OperationSuccess (str, len') <- tcpRecv len
+    | RecoverableError _ => clientLoop len
+    | FatalError err => do putStr ("Error sending: " ++ (show err))
+                           tcpFinalise
     | ConnectionClosed => return () 
   putStr ("Received: " ++ str ++ "\n")
-  getAndSend
-
-getAndSend = do
   input <- getStr
-  if (input == "bye!\n") then do 
-       tcpClose 
-       return ()
+  if (input == "bye!\n") then tcpClose 
   else do
-    OperationSuccess len <- tcpSend input
-      | RecoverableError _ => getAndSend
-      | FatalError _ => tcpFinalise
+    OperationSuccess _ <- tcpSend input
+      | RecoverableError err => do putStr ("Error sending: " ++ (show err))
+                                   tcpClose
+      | FatalError err => do putStr ("Error sending: " ++ (show err))
+                             tcpFinalise
       | ConnectionClosed => return ()
-    recvAndPrint 1024
+    clientLoop len 
 
 
 echoClient : SocketAddress -> 
@@ -42,7 +36,7 @@ echoClient sa port = do
     | ConnectionClosed => putStr "Unable to connect: connection closed. \n"
     | FatalError err => putStr ("Unable to connect: fatal error " ++ (show err))
   putStr "Connected!\n"
-  getAndSend
+  clientLoop 1024
 
 
 main : IO ()
