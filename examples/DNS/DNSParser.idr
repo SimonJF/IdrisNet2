@@ -152,58 +152,59 @@ decodeDomainPayload dom_pl = do
     Left err => return $ Left err
     Right domain' => return $ Right (DNSDomainPayload domain')
 
+
+
+getPayloadRel : (pl_ty : DNSPayloadType) ->
+              (ty : DNSType) -> 
+              (cls : DNSClass) -> 
+              Either DNSParseError (DNSPayloadRel ty cls pl_ty)
+getPayloadRel DNSIPv4 DNSTypeA DNSClassIN = Right DNSPayloadRelIP
+getPayloadRel DNSIPv6 DNSTypeAAAA DNSClassIN = Right DNSPayloadRelIP6
+getPayloadRel DNSDomain DNSTypeCNAME DNSClassIN = Right DNSPayloadRelCNAME
+getPayloadRel DNSDomain DNSTypeNS DNSClassIN = Right DNSPayloadRelNS
+getPayloadRel _ _ _ = Left PayloadUnimplemented
+
+
+payloadType : DNSType -> DNSClass -> Either DNSParseError DNSPayloadType
+payloadType DNSTypeA DNSClassIN = Right DNSIPv4
+payloadType DNSTypeAAAA DNSClassIN = Right DNSIPv6
+payloadType DNSTypeNS DNSClassIN =  Right DNSDomain
+payloadType DNSTypeCNAME DNSClassIN = Right DNSDomain
+payloadType _ _ = Left PayloadUnimplemented
+
+
+
 total
 decodePayload : (pl_rel : DNSPayloadRel ty cl pl_ty) ->
-                (ty_rel : DNSTypeRel i_ty ty) ->
-                (cl_rel : DNSClassRel i_cl cl) ->
-                (mkTy (dnsPayloadLang i_ty i_cl)) ->
+                (mkTy (payloadType' ty cl)) ->
                 { [DNSPARSER DNSState] }
                 Eff m (Either DNSParseError (DNSPayload pl_ty))
-decodePayload DNSPayloadRelIP DNSTypeRelA DNSClassRelIN ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
-decodePayload DNSPayloadRelCNAME DNSTypeRelCNAME DNSClassRelIN dom_pl = decodeDomainPayload dom_pl
-decodePayload DNSPayloadRelNS DNSTypeRelNS DNSClassRelIN dom_pl = decodeDomainPayload dom_pl
-decodePayload _ _ _ _ = return $ Left (PayloadUnimplemented)
+decodePayload DNSPayloadRelIP ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
+decodePayload DNSPayloadRelCNAME dom_pl = decodeDomainPayload dom_pl
+decodePayload DNSPayloadRelNS dom_pl = decodeDomainPayload dom_pl
+decodePayload _ _ = return $ Left (PayloadUnimplemented)
+ 
 
-
-getRelations : (ty_code : Int) -> 
-               (cls_code : Int) -> 
-               (ty : DNSType) ->
-               (cls : DNSClass) ->
-               (pl_ty : DNSPayloadType) ->
-               Maybe (DNSTypeRel ty_code ty, DNSClassRel cls_code cls, DNSPayloadRel ty cls pl_ty)
-getRelations ty_code cls_code ty cls pl_ty = do
-  t_rel <- dnsTypeRel ty_code ty
-  c_rel <- dnsClassRel cls_code cls
-  pl_rel <- getPayloadRel pl_ty ty cls
-  return (t_rel, c_rel, pl_rel)
-
-
-decodeRecordCodes : (ty_code : Int) -> (cls_code : Int) -> Maybe (DNSType, DNSClass, DNSPayloadType)
-decodeRecordCodes ty_code cls_code = do
-  ty <- dnsCodeToType ty_code
-  cls <- dnsCodeToClass cls_code
-  pl_ty <- payloadType ty cls
-  return (ty, cls, pl_ty)
-
+-- TODO: Might be nice to prettify this... Pity we're wrapped in Eff so
+-- we can't use the Either monad 
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
                  Eff m (Either DNSParseError DNSRecord)
-parseDNSRecord x = ?mv -- (encoded_domain ## ty ## ty_prf ## cls ## cls_prf ## ttl ## len ## len_prf ## payload) = ?mv
-{-
+parseDNSRecord (encoded_domain ## ty ## cls ## ttl ## len ## len_prf ## payload) = do
   let ttl' = val ttl
   domain <- (decodeDomain encoded_domain)
-  case decodeRecordCodes (val ty) (val cls) of
-    Just (ty', cls', pl_ty) => do
-      let m_rels = getRelations (val ty) (val cls) ty' cls' pl_ty
-      case m_rels of
-        Just (ty_rel, cls_rel, pl_rel) => do
-          payload' <- decodePayload pl_rel ty_rel cls_rel payload
-          case (domain, payload') of 
-            (Left err, _) => return $ Left err
-            (_, Left err) => return $ Left err
-            (Right domain'', Right payload'') => return $ Right (MkDNSRecord domain'' ty' cls' ttl' pl_rel payload'')
-    Nothing => return $ Left PayloadUnimplemented
--}
+  case (payloadType ty cls) of
+    Left err => return $ Left err
+    Right pl_ty => do
+      case (domain, getPayloadRel pl_ty ty cls) of
+        (Left err, _) => return $ Left err
+        (_, Left err) => return $ Left err
+        (Right domain', Right pl_rel) => do 
+          decoded_pl <- decodePayload pl_rel payload
+          case decoded_pl of
+            Left err => return $ Left err
+            Right decoded_pl' => 
+              return $ Right (MkDNSRecord domain' ty cls (val ttl) pl_rel decoded_pl')
 
 -- Ugly hack, since records aren't of the same type and therefore we can't 
 -- use sequence. Also proves to the TC that the lengths are as stated.

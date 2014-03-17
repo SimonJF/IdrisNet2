@@ -452,23 +452,6 @@ showPayload DNSPayloadRelCNAME (DNSDomainPayload dom) = "Domain: " ++ show dom
 showPayload DNSPayloadRelNS (DNSDomainPayload dom) = "Domain: " ++ show dom
 
 
-getPayloadRel : (pl_ty : DNSPayloadType) ->
-              (ty : DNSType) -> 
-              (cls : DNSClass) -> 
-              Maybe (DNSPayloadRel ty cls pl_ty)
-getPayloadRel DNSIPv4 DNSTypeA DNSClassIN = Just DNSPayloadRelIP
-getPayloadRel DNSIPv6 DNSTypeAAAA DNSClassIN = Just DNSPayloadRelIP6
-getPayloadRel DNSDomain DNSTypeCNAME DNSClassIN = Just DNSPayloadRelCNAME
-getPayloadRel DNSDomain DNSTypeNS DNSClassIN = Just DNSPayloadRelNS
-getPayloadRel _ _ _ = Nothing
-
-
-payloadType : DNSType -> DNSClass -> Maybe DNSPayloadType
-payloadType DNSTypeA DNSClassIN = Just DNSIPv4
-payloadType DNSTypeAAAA DNSClassIN = Just DNSIPv6
-payloadType DNSTypeNS DNSClassIN =  Just DNSDomain
-payloadType DNSTypeCNAME DNSClassIN = Just DNSDomain
-payloadType _ _ = Nothing
 
 {-
 getPayloadRel' : (ty_rel : DNSTypeRel ty_code ty) ->
