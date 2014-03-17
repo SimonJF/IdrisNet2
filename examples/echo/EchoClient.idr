@@ -8,12 +8,6 @@ clientLoop : ByteLength ->
                  [TCPCLIENT (), STDIO]} 
                Eff IO ()
 clientLoop len = do
-  OperationSuccess (str, len') <- tcpRecv len
-    | RecoverableError _ => clientLoop len
-    | FatalError err => do putStr ("Error sending: " ++ (show err))
-                           tcpFinalise
-    | ConnectionClosed => return () 
-  putStr ("Received: " ++ str ++ "\n")
   input <- getStr
   if (input == "bye!\n") then tcpClose 
   else do
@@ -22,7 +16,14 @@ clientLoop len = do
                                    tcpClose
       | FatalError err => do putStr ("Error sending: " ++ (show err))
                              tcpFinalise
-      | ConnectionClosed => return ()
+      | ConnectionClosed => return ()  
+    OperationSuccess (str, len') <- tcpRecv len
+      | RecoverableError err => do putStr ("Error receiving: " ++ (show err))
+                                   tcpClose
+      | FatalError err => do putStr ("Error receiving: " ++ (show err))
+                             tcpFinalise
+      | ConnectionClosed => return () 
+    putStr ("Received: " ++ str ++ "\n")
     clientLoop len 
 
 

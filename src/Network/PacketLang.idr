@@ -144,7 +144,7 @@ bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 
 -- Syntax rules, so it's nicer to write these things...
-bit : (w : Nat) -> {default proof { refine oh;} 
+bit : (w : Nat) -> {default tactics { refine oh; solve; } 
                      p : so (w > 0) } 
                 -> Chunk
 bit w {p} = Bit w p
