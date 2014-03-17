@@ -10,7 +10,7 @@ modules = Network.Packet,
           Network.UDP.UDPClient,
           Network.UDP.UDPCommon,
           Network.UDP.UDPServer
-opts = "-p neweffects"
+opts = "-p effects"
 makefile = MakefileC
 
 objs = bindata.o, bindata.h, idrisnet.o, idrisnet.h

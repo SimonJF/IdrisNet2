@@ -29,62 +29,53 @@ printSimpleStruct (s1 ## s2 ## (Right s3) ## xs ## b1 ## b2 ## prf) = do
 sendResponse : { [STDIO, TCPSERVERCLIENT (ClientConnected)] ==>
                  [STDIO, TCPSERVERCLIENT ()] } Eff IO ()
 sendResponse = do 
-  send_res <- tcpWritePacket simpleResponse simpleResponseInstance
-  case send_res of
-    OperationSuccess _ => do putStr "Sent response!\n" 
-                             closeClient
-    RecoverableError _ => sendResponse
-    FatalError err => do putStr ("Fatal error: " ++ (show err)) 
-                         finaliseClient
-    ConnectionClosed => return ()
-  
+  OperationSuccess _ <- tcpWritePacket simpleResponse simpleResponseInstance
+    | RecoverableError _ => sendResponse
+    | FatalError err => do putStr ("Fatal error: " ++ (show err)) 
+                           tcpFinalise
+    | ConnectionClosed => return ()
+  putStr "Sent response!\n" 
+  tcpClose 
+
 
 clientTask' : { [STDIO, TCPSERVERCLIENT (ClientConnected)] ==>
                 [STDIO, TCPSERVERCLIENT ()] } Eff IO ()
 clientTask' = do 
-  op_res <- tcpReadPacket simpleStruct 1024
-  case op_res of
-    OperationSuccess m_packet => 
-      case m_packet of
-           Just (packet, len) => do
-             printSimpleStruct packet
-             sendResponse
-           Nothing => do putStr "Error decoding packet"
-                         closeClient
-    RecoverableError err => clientTask'
-    FatalError err => do lift' (putStr $ "Fatal error: " ++ (show err) ++ "\n")
-                         finaliseClient
-    ConnectionClosed => return ()
-      
+  OperationSuccess m_packet <- tcpReadPacket simpleStruct 1024
+    | RecoverableError err => clientTask'
+    | FatalError err => do putStr ("Fatal error: " ++ (show err) ++ "\n")
+                           tcpFinalise
+    | ConnectionClosed => return ()
+  case m_packet of
+       Just (packet, len) => do
+         printSimpleStruct packet
+         sendResponse
+       Nothing => do 
+         putStr "Error decoding packet"
+         tcpClose
 
 clientTask : ClientProgram ()
-clientTask = new () clientTask'
+clientTask = new clientTask'
 
 packetServer : SocketAddress -> Port -> { [TCPSERVER (), STDIO] } Eff IO ()
 packetServer sa p = do
-  bind_res <- bind sa p
-  case bind_res of
-       OperationSuccess _ => do
-         case !listen of
-              OperationSuccess _ => do
-                case !(accept clientTask) of
-                  OperationSuccess _ => closeListening
-                  RecoverableError _ => closeListening
-                  FatalError err => do 
-                    lift' (putStr $ "Error accepting client: " ++ (show err))
-                    finaliseServer
-                  ConnectionClosed => return ()
-              RecoverableError _ => closeBound
-              FatalError err => do 
-                lift' (putStr $ "Error listening: " ++ (show err))
-                finaliseServer
-                return ()
-              ConnectionClosed => return ()
-       RecoverableError err => return ()
-       FatalError err => do lift' (putStr $ "Error binding: " ++ (show err))
-                            return ()
-       ConnectionClosed => return ()
-
+  OperationSuccess _ <- bind sa p
+    | RecoverableError err => return ()
+    | FatalError err => do (putStr $ "Error binding: " ++ (show err))
+                           return ()
+    | ConnectionClosed => return ()
+  OperationSuccess _ <- listen 
+    | RecoverableError _ => closeBound
+    | FatalError err => do 
+        putStr ("Error listening: " ++ (show err))
+        finaliseServer
+    | ConnectionClosed => return ()
+  OperationSuccess _ <- accept clientTask
+    | RecoverableError _ => closeListening
+    | FatalError err => do 
+        putStr ("Error accepting client: " ++ (show err))
+        finaliseServer
+  closeListening
 
 main : IO ()
 main = run (packetServer (IPv4Addr 127 0 0 1) 1234)

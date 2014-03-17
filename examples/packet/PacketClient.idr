@@ -19,44 +19,39 @@ printRecvPacket (s1 ## s2) = do
 recvResponse : { [STDIO, TCPCLIENT (ClientConnected)] ==>
                  [STDIO, TCPCLIENT ()] } Eff IO ()
 recvResponse = do
-  recv_res <- tcpReadPacket simpleResponse 1024
-  case recv_res of
-      OperationSuccess m_packet =>
-        case m_packet of
-          Just (pckt, len) => do printRecvPacket pckt
+  OperationSuccess m_packet <- tcpReadPacket simpleResponse 1024
+    | RecoverableError err => do putStr ("Error: " ++ (show err) ++ "\n")
                                  tcpClose
-          Nothing => do putStr "Error decoding packet"
-                        tcpClose
-      RecoverableError err => do lift' (putStr ("Error: " ++ (show err) ++ "\n"))
-                                 tcpClose
-      FatalError err => do
-        lift' (putStr ("Fatal error sending packet: " ++ (show err) ++ "\n"))
-        tcpFinalise
-      ConnectionClosed => return ()
-
+    | FatalError err => do putStr ("Error: " ++ (show err) ++ "\n") 
+                           tcpFinalise
+    | ConnectionClosed => return ()
+  case m_packet of 
+    Just (pckt, len) => do printRecvPacket pckt
+                           tcpClose
+    Nothing => do putStr "Error decoding packet"
+                  tcpClose
 
 sendAndRecv : { [STDIO, TCPCLIENT (ClientConnected)] ==>
                 [STDIO, TCPCLIENT ()] } Eff IO ()
 sendAndRecv = do
-  send_res <- tcpWritePacket simpleStruct simpleStructInstance
-  case send_res of
-       OperationSuccess _ => recvResponse
-       RecoverableError err => do lift' (putStr ("Error: " ++ (show err) ++ "\n"))
-                                  tcpClose
-       FatalError err => do
-         lift' (putStr ("Fatal error sending packet: " ++ (show err) ++ "\n"))
+  OperationSuccess _ <- tcpWritePacket simpleStruct simpleStructInstance
+    | RecoverableError err => do 
+         putStr ("Error: " ++ (show err) ++ "\n")
+         tcpClose
+    | FatalError err => do
+         putStr ("Fatal error sending packet: " ++ (show err) ++ "\n")
          tcpFinalise
-       ConnectionClosed => return ()
+    | ConnectionClosed => return ()
+  recvResponse
 
 clientTask : SocketAddress -> Port -> { [STDIO, TCPCLIENT ()] } Eff IO ()
 clientTask sa p = do
-  connect_res <- tcpConnect sa p
-  case connect_res of
-       OperationSuccess _ => sendAndRecv
-       RecoverableError _ => clientTask sa p
-       FatalError err =>
-         lift' (putStr ("Fatal error connecting: " ++ (show err) ++ "\n"))
-       ConnectionClosed => return ()
+  OperationSuccess _ <- tcpConnect sa p
+    | RecoverableError _ => clientTask sa p
+    | FatalError err =>
+         putStr ("Fatal error connecting: " ++ (show err) ++ "\n")
+    | ConnectionClosed => return ()
+  sendAndRecv
 
 main : IO ()
 main = run (clientTask (IPv4Addr 127 0 0 1) 1234)

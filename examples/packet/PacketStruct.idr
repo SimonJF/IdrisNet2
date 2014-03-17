@@ -11,9 +11,8 @@ simpleStruct = do
   listn 3 cstring
   b1 <- bool
   b2 <- bool
-  prop_or (P_BOOL b2) (P_BOOL b1) -- FIXME
-  -- CHUNK (Prop (P_OR (P_BOOL b2) (P_BOOL b1)))
-  -- CHUNK (Prop (P_OR (P_BOOL b2) (P_BOOL b1)))
+  prop (prop_or (prop_bool b2) 
+                (prop_bool b1)) 
 
 myBoundedInt : Bounded 32
 myBoundedInt = BInt 9001 oh
@@ -34,3 +33,4 @@ simpleResponse = do
 
 simpleResponseInstance : (mkTy simpleResponse)
 simpleResponseInstance = "Got" ## "It!"
+

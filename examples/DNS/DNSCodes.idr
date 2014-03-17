@@ -1,5 +1,6 @@
 module DNSCodes
 import Network.Socket
+import Network.PacketLang
 
 %access public
 
@@ -37,6 +38,11 @@ codeToDNSOpcode 1 = Just IQUERY
 codeToDNSOpcode 2 = Just STATUS
 codeToDNSOpcode _ = Nothing
 
+dnsOpcodeToCode : DNSHdrOpcode -> Int
+dnsOpcodeToCode QUERY = 0
+dnsOpcodeToCode IQUERY = 1
+dnsOpcodeToCode STATUS = 2
+
 data DNSClass = DNSClassIN -- Internet
   -- None of the following are used, anyway...
 {-
@@ -66,6 +72,17 @@ dnsClassToRel {code = 4} DNSClassHS = DNSClassRelHS
 dnsCodeToClass : (code : Int) -> Maybe DNSClass
 dnsCodeToClass 1 = Just DNSClassIN
 dnsCodeToClass _ = Nothing
+
+dnsClassToCode : DNSClass -> Int
+dnsClassToCode DNSClassIN = 1
+
+dnsCodeToClass' : Bounded 16 -> Maybe DNSClass
+dnsCodeToClass' (BInt 1 oh) = Just DNSClassIN
+dnsCodeToClass' _ = Nothing
+
+dnsClassToCode' : DNSClass -> Bounded 16
+dnsClassToCode' DNSClassIN = BInt 1 oh
+
 {-
 dnsCodeToClass {cls = DNSClassCS} 2 = Just DNSClassRelCS
 dnsCodeToClass {cls = DNSClassCH} 3 = Just DNSClassRelCH
@@ -93,6 +110,14 @@ dnsCodeToQClass 3 = Just DNSQClassCH
 dnsCodeToQClass 4 = Just DNSQClassHS
 dnsCodeToQClass 255 = Just DNSQClassANY
 dnsCodeToQClass _ = Nothing
+
+
+dnsQClassToCode : DNSQClass -> Int
+dnsQClassToCode DNSQClassIN = 1
+dnsQClassToCode DNSQClassCS = 2
+dnsQClassToCode DNSQClassCH = 3
+dnsQClassToCode DNSQClassHS = 4
+dnsQClassToCode DNSQClassANY = 255
 
 -- A few constants... Might change this
 A_VAL : Int
@@ -225,6 +250,39 @@ data DNSQTypeRel : Int -> DNSQType -> Type where
 --  DNSQTypeRelHINFO : DNSQTypeRel 13 DNSQTypeHINFO
 --  DNSQTypeRelMINFO : DNSQTypeRel 14 DNSQTypeMINFO
 
+dnsTypeToCode' : DNSType -> Bounded 16
+dnsTypeToCode' DNSTypeA = (BInt 1 oh)
+dnsTypeToCode' DNSTypeNS = (BInt 2 oh) 
+dnsTypeToCode' DNSTypeCNAME = (BInt 5 oh)
+dnsTypeToCode' DNSTypeNULL = (BInt 10 oh)
+dnsTypeToCode' DNSTypePTR = (BInt 12 oh)
+dnsTypeToCode' DNSTypeMX = (BInt 15 oh)
+dnsTypeToCode' DNSTypeTXT = (BInt 16 oh)
+dnsTypeToCode' DNSTypeAAAA = (BInt 28 oh)
+
+dnsTypeToCode : DNSType -> Int
+dnsTypeToCode DNSTypeA = 1
+dnsTypeToCode DNSTypeNS = 2
+dnsTypeToCode DNSTypeCNAME = 5
+dnsTypeToCode DNSTypeNULL = 10
+dnsTypeToCode DNSTypePTR = 12
+dnsTypeToCode DNSTypeMX = 15
+dnsTypeToCode DNSTypeTXT = 16
+dnsTypeToCode DNSTypeAAAA = 28
+
+
+dnsCodeToType' : (Bounded 16) -> Maybe DNSType
+dnsCodeToType' (BInt 1 oh) = Just DNSTypeA
+dnsCodeToType' (BInt 2 oh) = Just DNSTypeNS
+dnsCodeToType' (BInt 5 oh) = Just DNSTypeCNAME
+dnsCodeToType' (BInt 10 oh) = Just DNSTypeNULL
+dnsCodeToType' (BInt 12 oh) = Just DNSTypePTR
+dnsCodeToType' (BInt 15 oh) = Just DNSTypeMX
+dnsCodeToType' (BInt 16 oh) = Just DNSTypeTXT
+dnsCodeToType' (BInt 28 oh) = Just DNSTypeAAAA
+dnsCodeToType' (BInt _ oh) = Nothing
+
+
 dnsCodeToType : (code : Int) -> Maybe DNSType
 dnsCodeToType 1 = Just DNSTypeA
 dnsCodeToType 2 = Just DNSTypeNS
@@ -266,6 +324,7 @@ dnsTypeRel 28 DNSTypeAAAA = Just DNSTypeRelAAAA
 --dnsTypeToRel {code = 11} DNSTypeWKS = DNSTypeRelWKS
 --dnsTypeToRel {code = 13} DNSTypeHINFO = DNSTypeRelHINFO
 --dnsTypeToRel {code = 14} DNSTypeMINFO = DNSTypeRelMINFO
+
 dnsCodeToQType : (code : Int) -> Maybe DNSQType
 dnsCodeToQType 1 = Just DNSQTypeA
 dnsCodeToQType 2 = Just DNSQTypeNS
@@ -280,6 +339,21 @@ dnsCodeToQType 253 = Just DNSQTypeMAILB
 dnsCodeToQType 254 = Just DNSQTypeMAILA
 dnsCodeToQType 255 = Just DNSQTypeALL
 dnsCodeToQType _ = Nothing
+
+
+dnsQTypeToCode : DNSQType -> Int
+dnsQTypeToCode DNSQTypeA = 1
+dnsQTypeToCode DNSQTypeNS = 2
+dnsQTypeToCode DNSQTypeCNAME = 5
+dnsQTypeToCode DNSQTypeNULL = 10
+dnsQTypeToCode DNSQTypePTR = 12
+dnsQTypeToCode DNSQTypeMX = 15
+dnsQTypeToCode DNSQTypeTXT = 16
+dnsQTypeToCode DNSQTypeAAAA = 28
+dnsQTypeToCode DNSQTypeAXFR = 252
+dnsQTypeToCode DNSQTypeMAILB = 253
+dnsQTypeToCode DNSQTypeMAILA = 254
+dnsQTypeToCode DNSQTypeALL = 255
 
 dnsQTypeRel : (code : Int) -> (ty : DNSQType) -> Maybe (DNSQTypeRel code ty)
 dnsQTypeRel 1 DNSQTypeA = Just DNSQTypeRelA
@@ -340,6 +414,14 @@ dnsCodeToResponse 5 = Just DNSResponseRefusedError
 dnsCodeToResponse _ = Nothing
 
 
+dnsResponseToCode : DNSResponse -> Int
+dnsResponseToCode DNSResponseNoError = 0
+dnsResponseToCode DNSResponseFormatError = 1
+dnsResponseToCode DNSResponseServerError = 2
+dnsResponseToCode DNSResponseNameError = 3
+dnsResponseToCode DNSResponseNotImplementedError = 4
+
+
 DomainFragment : Type
 DomainFragment = String
 
@@ -369,24 +451,6 @@ showPayload DNSPayloadRelIP6 (DNSIPv6Payload addr) = "IPv6 " ++ (show addr)
 showPayload DNSPayloadRelCNAME (DNSDomainPayload dom) = "Domain: " ++ show dom
 showPayload DNSPayloadRelNS (DNSDomainPayload dom) = "Domain: " ++ show dom
 
-
-getPayloadRel : (pl_ty : DNSPayloadType) ->
-              (ty : DNSType) -> 
-              (cls : DNSClass) -> 
-              Maybe (DNSPayloadRel ty cls pl_ty)
-getPayloadRel DNSIPv4 DNSTypeA DNSClassIN = Just DNSPayloadRelIP
-getPayloadRel DNSIPv6 DNSTypeAAAA DNSClassIN = Just DNSPayloadRelIP6
-getPayloadRel DNSDomain DNSTypeCNAME DNSClassIN = Just DNSPayloadRelCNAME
-getPayloadRel DNSDomain DNSTypeNS DNSClassIN = Just DNSPayloadRelNS
-getPayloadRel _ _ _ = Nothing
-
-
-payloadType : DNSType -> DNSClass -> Maybe DNSPayloadType
-payloadType DNSTypeA DNSClassIN = Just DNSIPv4
-payloadType DNSTypeAAAA DNSClassIN = Just DNSIPv6
-payloadType DNSTypeNS DNSClassIN =  Just DNSDomain
-payloadType DNSTypeCNAME DNSClassIN = Just DNSDomain
-payloadType _ _ = Nothing
 
 
 {-

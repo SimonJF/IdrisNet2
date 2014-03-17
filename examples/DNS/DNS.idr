@@ -127,7 +127,6 @@ validQCLASS i = (validCLASS i) || i == 255
 validOpcode : Int -> Bool
 validOpcode i = i == 0 || i == 1 || i == 2
 
-abstract
 nullterm : PacketLang
 nullterm = do nt <- bits 8
               check ((val nt) == 0)
@@ -138,14 +137,13 @@ validRespCode i = i >= 0 && i <= 5
 -- DNS allows compression in the form of references.
 -- These take the form of two octets, the first two bits of which 
 -- are 11. The rest is 14 bits.
-abstract -- This is junk, we don't really want it to reduce
 tagCheck : Int -> PacketLang
 tagCheck i = do tag1 <- bits 1
                 tag2 <- bits 1
                 let v1 = val tag1
                 let v2 = val tag2
-                prop_eq v1 i
-                prop_eq v2 i
+                prop (prop_eq v1 i)
+                prop (prop_eq v2 i)
 
 dnsReference : PacketLang
 dnsReference = do tagCheck 1
@@ -173,7 +171,7 @@ dnsQuestion = do dnsDomain
                  qtype <- bits 16
                  check (validQTYPE (val qtype))
                  qclass <- bits 16 
-                 check (validQCLASS 16)
+                 check (validQCLASS (val qclass))
 
 dnsIP : PacketLang
 dnsIP = do
@@ -196,6 +194,16 @@ dnsPayloadLang 2 1 = dnsDomain
 dnsPayloadLang 5 1 = dnsDomain
 dnsPayloadLang 28 1 = null
 dnsPayloadLang _ _ = null
+
+
+payloadType' : DNSType -> DNSClass -> PacketLang
+payloadType' DNSTypeA DNSClassIN = dnsIP
+payloadType' DNSTypeAAAA DNSClassIN = null 
+payloadType' DNSTypeNS DNSClassIN = dnsDomain
+payloadType' DNSTypeCNAME DNSClassIN = dnsDomain
+payloadType' _ _ = null
+
+
 
 -- abstract
 dnsHeader : PacketLang
@@ -221,18 +229,13 @@ dnsHeader =
 dnsRR : PacketLang
 dnsRR = with PacketLang do 
            domain <- dnsDomain
-           ty <- bits 16
-           let vt = val ty
-           check (validTYPE vt)
-           cls <- bits 16
-           let vc = val cls
-           check (validCLASS vc)
+           ty <- decodable 16 DNSType dnsCodeToType' dnsTypeToCode'
+           cls <- decodable 16 DNSClass dnsCodeToClass' dnsClassToCode' 
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
            let vl = ((val len) * 8)
            prf <- check (vl > 0)
-           dnsPayloadLang vt vc
---           bounded_bits vl prf
+           payloadType' ty cls
 
 dns : PacketLang
 dns = with PacketLang do 

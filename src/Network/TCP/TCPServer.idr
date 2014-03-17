@@ -90,11 +90,11 @@ tcpRecv : ByteLength -> { [TCPSERVERCLIENT (ClientConnected)] ==>
                         Eff IO (SocketOperationRes (String, ByteLength))
 tcpRecv bl = (ReadString bl)
 
-closeClient : { [TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
-closeClient = CloseClient
+tcpClose : { [TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
+tcpClose = CloseClient
 
-finaliseClient : { [TCPSERVERCLIENT (ClientError)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
-finaliseClient = FinaliseClient
+tcpFinalise : { [TCPSERVERCLIENT (ClientError)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
+tcpFinalise = FinaliseClient
 
 tcpWritePacket : (pl : PacketLang) ->
                  (mkTy pl) ->
@@ -132,7 +132,8 @@ instance Handler TCPServerClient IO where
       Left err =>
         if err == EAGAIN then
           k (RecoverableError err) (CC sock addr)  
-        else if err == 0 then -- Socket closed
+        else if err == 0 then do -- Socket closed
+          close sock
           k (ConnectionClosed) ()
         else k (FatalError err) (CE sock)
       Right (str, bl) => k (OperationSuccess (str, bl)) (CC sock addr)
@@ -160,7 +161,8 @@ instance Handler TCPServerClient IO where
          Left err =>
            if err == EAGAIN then
              k (RecoverableError err) (CC sock addr)
-           else if err == 0 then
+           else if err == 0 then do
+             close sock
              k (ConnectionClosed) ()
            else
              k (FatalError err) (CE sock)
