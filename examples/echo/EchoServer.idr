@@ -7,26 +7,19 @@ import Network.TCP.TCPServer
 
 receive' : { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
              [STDIO, TCPSERVERCLIENT ()] } Eff IO ()
-
-echo : String -> { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
-             [STDIO, TCPSERVERCLIENT ()] } Eff IO ()
-
-
-
 receive' = do
+  -- Receive
   OperationSuccess (str, len) <- tcpRecv 1024
     | RecoverableError _ => receive'
     | FatalError err => do putStr ("Error receiving: " ++ (show err)) 
-                           finaliseClient
+                           tcpFinalise
     | ConnectionClosed => return ()
-  echo str
-  
-
-echo str = do
+  -- Echo
   OperationSuccess _ <- tcpSend str
-    | RecoverableError _ => echo str
+    | RecoverableError err => do putStr ("Error sending: " ++ (show err)) 
+                                 tcpClose 
     | FatalError err => do putStr ("Error sending: " ++ (show err)) 
-                           finaliseClient
+                           tcpFinalise
     | ConnectionClosed => return ()
   receive'
 
@@ -56,8 +49,7 @@ serverLoop = do
   serverLoop
 
 setupServer : SocketAddress -> Port -> Bool ->
-              { [TCPSERVER (), STDIO] ==>
-                [TCPSERVER (), STDIO] } Eff IO ()
+              { [TCPSERVER (), STDIO] } Eff IO ()
 setupServer sa port do_fork = do
   putStr "Binding\n" 
   OperationSuccess _ <- bind sa port
