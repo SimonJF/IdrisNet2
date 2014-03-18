@@ -168,10 +168,8 @@ dnsDomain = dnsReference // dnsLabels
 
 dnsQuestion : PacketLang
 dnsQuestion = do dnsDomain
-                 qtype <- bits 16
-                 check (validQTYPE (val qtype))
-                 qclass <- bits 16 
-                 check (validQCLASS (val qclass))
+                 decodable 16 DNSQType dnsCodeToQType dnsQTypeToCode
+                 decodable 16 DNSQClass dnsCodeToQClass dnsQClassToCode
 
 dnsIP : PacketLang
 dnsIP = do
@@ -205,14 +203,12 @@ payloadType' _ _ = null
 
 
 
--- abstract
 dnsHeader : PacketLang
 dnsHeader = 
   with PacketLang do 
      ident <- bits 16 -- Request identifier
      qr <- bool -- Query or response 
-     opcode <- bits 4 -- Which type of query? Only 0, 1 and 2 valid
-     check (validOpcode (val opcode))
+     opcode <- decodable 4 DNSHdrOpcode dnsCodeToOpcode dnsOpcodeToCode
      aa <- bool -- Only set in response, is responding server authority?
      tc <- bool -- Was message truncated?
      rd <- bool -- Recursion desired, set in query, copied into response
@@ -221,8 +217,7 @@ dnsHeader =
      check (not z)
      ans_auth <- bool
      auth_acceptable <- bool
-     resp <- bits 4 -- Response code, only 0-5 valid
-     check (validRespCode (val resp))
+     decodable 4 DNSResponse dnsCodeToResponse dnsResponseToCode
 
 -- DNS Resource Record
 -- The same for answers, authorities and additional info.
@@ -233,8 +228,7 @@ dnsRR = with PacketLang do
            cls <- decodable 16 DNSClass dnsCodeToClass' dnsClassToCode' 
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
-           let vl = ((val len) * 8)
-           prf <- check (vl > 0)
+           prf <- check ((val len) > 0)
            payloadType' ty cls
 
 dns : PacketLang

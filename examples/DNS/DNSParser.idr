@@ -92,12 +92,10 @@ unmarshalReference : DNSReference ->
                      { [DNSPARSER DNSState] } Eff m (Maybe (List DomainFragment))
 unmarshalReference ref = UnmarshalReference ref
 
-parseDNSHeader : (mkTy dnsHeader) -> Maybe DNSHeader
-parseDNSHeader (ident ## qr ## opcode ## opcode_prf ## aa ## tc ## rd ## 
-                ra ## z ## z_prf ## ans_auth ## nonauth_accept ## resp ## resp_prf) = do
-  op <- codeToDNSOpcode $ (val opcode)
-  resp' <- dnsCodeToResponse $ (val resp)
-  return $ MkDNSHeader (val ident) qr op aa tc rd ra ans_auth nonauth_accept resp'
+parseDNSHeader : (mkTy dnsHeader) -> DNSHeader
+parseDNSHeader (ident ## qr ## opcode ## aa ## tc ## rd ## 
+                ra ## z ## z_prf ## ans_auth ## nonauth_accept ## resp) = 
+  MkDNSHeader (val ident) qr opcode aa tc rd ra ans_auth nonauth_accept resp
   
 
 decodeReference : DNSReference -> { [DNSPARSER DNSState] } 
@@ -128,13 +126,13 @@ decodeDomain : (mkTy dnsDomain) ->
 decodeDomain (Left (_ ## ref)) = decodeReference (val ref)
 decodeDomain (Right encoded_lbls) = decodeLabels encoded_lbls
 
-parseDNSQuestion : (mkTy dnsQuestion) -> { [DNSPARSER DNSState] } Eff m (Maybe DNSQuestion)
-parseDNSQuestion (encoded_domain ## qt ## qt_prf ## qc ## qc_prf) = do
+parseDNSQuestion : (mkTy dnsQuestion) -> { [DNSPARSER DNSState] } Eff m (Either DNSParseError DNSQuestion)
+parseDNSQuestion (encoded_domain ## qt ## qc) = do
   decoded_domain <- decodeDomain encoded_domain
-  case (decoded_domain, dnsCodeToQType (val qt), dnsCodeToQClass (val qc)) of
-    (Right domain', Just qt', Just qc') => return $ Just (MkDNSQuestion domain' qt' qc')
-    _ => return Nothing
-
+  case decoded_domain of
+    Left err => return $ Left err
+    Right decoded_domain' => 
+      return $ Right (MkDNSQuestion decoded_domain' qt qc)
 
 decodeIP : (mkTy dnsIP) -> SocketAddress
 decodeIP (i1 ## i2 ## i3 ## i4) = 
@@ -239,12 +237,13 @@ parseDNSPacket (hdr ## qdcount ## ancount ## nscount ##
   additionals' <- mapVE parseDNSRecord additionals
   let records = sequenceRecords as' auths' additionals'
   -- Now, see if everything was successful!
-  case (hdr', qs'', records) of
-    (Just hdr'', Just qs''', Right (as'', auths'', additionals'')) => -- ?mv_rcase
-      return $ Right (MkDNS hdr'' _ _ _ _
+  case (qs'', records) of
+    (Right qs''', Right (as'', auths'', additionals'')) => -- ?mv_rcase
+      return $ Right (MkDNS hdr' _ _ _ _
                 qs''' as'' auths'' additionals'')
     -- Record parsing may throw an error
-    (_, _, Left err) => return $ Left err
+    (Left err, _) => return $ Left err
+    (_, Left err) => return $ Left err
     -- Nothing = bad code
     _ => return $ Left BadCode
 
@@ -266,11 +265,19 @@ parseDNS ptr len pckt = with Eff do
   finalise
   return res
 
+public
 data DNSEncodeError = OutOfBoundsError Nat Nat
                     | ProofConstructionError String
                     | LengthMismatchError Nat Nat
                     | UnsupportedPayloadType 
                     | InternalEncodeError String
+
+instance Show DNSEncodeError where
+  show (OutOfBoundsError n1 n2) = "Out of bounds: " ++ (show n1) ++ ", " ++ (show n2) 
+  show (ProofConstructionError s) = "Proof construction error: " ++ s
+  show (LengthMismatchError n1 n2) = "Length mismatch: " ++ (show n1) ++ ", " ++ (show n2)
+  show UnsupportedPayloadType = "Unsupported payload type"
+  show (InternalEncodeError s) = "Internal error: " ++ s
 
 -- Our old friend... Might be a better way of doing this
 lemma_vect_len : {x : Nat} -> (y : Nat) -> Vect x a -> Either DNSEncodeError (Vect y a)
@@ -340,31 +347,13 @@ encodeDomain xs = with Monad do
 encodeQuestion : DNSQuestion -> Either DNSEncodeError (mkTy dnsQuestion)
 encodeQuestion (MkDNSQuestion qnames ty cls) = with Monad do
   dom <- encodeDomain qnames 
-  b_ty_code <- isBounded 16 (intToNat $ dnsQTypeToCode ty)
-  b_cls_code <- isBounded 16 (intToNat $ dnsQClassToCode cls) 
-  case (choose (validQTYPE (val b_ty_code)), choose (validQCLASS (val b_cls_code))) of
-    (Left p1, Left p2) => Right (dom ## b_ty_code ## p1 ## b_cls_code ## p2)
-    (Right _, _) => Left $ ProofConstructionError ("Invalid qtype (qtype = " ++
-                            show (val b_ty_code) ++ ")")
-    (_, Right _) => Left $ ProofConstructionError ("Invalid qclass (qclass = " ++ 
-                            show (val b_cls_code) ++ ")")
-
+  return (dom ## ty ## cls)  
 
 encodeHeader : DNSHeader -> Either DNSEncodeError (mkTy dnsHeader) 
 encodeHeader (MkDNSHeader hdr_id query op auth trunc rd ra aa naa resp) = with Monad do
   b_id <- isBounded 16 (intToNat hdr_id)
-  b_op <- isBounded 4 (intToNat $ dnsOpcodeToCode op)
-  b_resp_code <- isBounded 4 (intToNat $ dnsResponseToCode resp)
-  case (choose (validOpcode (val b_op)), choose (validRespCode (val b_resp_code))) of
-    (Left op_prf, Left resp_prf) => 
-      Right (b_id ## query ## b_op ## op_prf ## auth ## trunc ## rd ## 
-            ra ## False ## oh ## aa ## naa ## b_resp_code ## resp_prf)
-    (Right _, _) => 
-      Left $ ProofConstructionError ("Invalid opcode (opcode = " ++ 
-                                        (show $ val b_op) ++ ")")
-    (_, Right _) => 
-      Left $ ProofConstructionError ("Invalid response code (resp code = " ++
-                                        (show $ val b_resp_code) ++ ")")
+  Right (b_id ## query ## op ## auth ## trunc ## rd ## 
+        ra ## False ## oh ## aa ## naa ## resp)
 
 encodeIP : DNSPayload DNSIPv4 -> Either DNSEncodeError (mkTy dnsIP)
 encodeIP (DNSIPv4Payload (IPv4Addr i1 i2 i3 i4)) = with Monad do
@@ -388,14 +377,30 @@ encodePayload DNSPayloadRelCNAME (DNSDomainPayload payload) = encodeDomain paylo
 encodePayload DNSPayloadRelNS (DNSDomainPayload payload) = encodeDomain payload
 encodePayload _ _ = Left UnsupportedPayloadType
 
+{-
+payloadLength : (rel : DNSPayloadRel ty cls pl_ty) ->
+                (payload : (mkTy (payloadType' ty cls))) ->
+                Either DNSEncodeError Int
+payloadLength DNSPayloadRelIP pl = Right $ bitLength _ pl
+
+payloadLength DNSPayloadRelIP6 pl = Left UnsupportedPayloadType
+payloadLength DNSPayloadRelCNAME pl = encodeDomain payload
+payloadLength DNSPayloadRelNS pl = encodeDomain payload
+payloadLength _ _ = Left UnsupportedPayloadType
+-}
 encodeRR : DNSRecord -> Either DNSEncodeError (mkTy dnsRR)
 encodeRR (MkDNSRecord name ty cls ttl rel pl) = with Monad do
   dom <- encodeDomain name
   b_ttl <- isBounded 32 (intToNat ttl)
-  b_len <- isBounded 16 100 -- This could be problematic... It would be nice to have this invariant encoded in the packetlang actually.
   encoded_pl <- encodePayload rel pl
-  return (dom ## ty ## cls ## b_ttl ## b_len ## (believe_me oh) ## encoded_pl)
+  let pl_len = (bitLength (payloadType' ty cls) encoded_pl) `div` 8
+  b_len <- isBounded 16 (intToNat pl_len) -- This could be problematic... It would be nice to have this invariant encoded in the packetlang actually.
+  case choose ((val b_len) > 0) of
+    Left prf =>
+      return (dom ## ty ## cls ## b_ttl ## b_len ## prf ## encoded_pl)
+    Right _ => Left $ ProofConstructionError "Length may not be zero"
 
+public
 encodeDNS : DNSPacket -> Either DNSEncodeError (mkTy dns) -- Maybe (mkTy dns)
 encodeDNS (MkDNS hdr qc ac nsc arc qs as auths ars) = with Monad do
     encoded_hdr <- encodeHeader hdr
@@ -414,7 +419,16 @@ encodeDNS (MkDNS hdr qc ac nsc arc qs as auths ars) = with Monad do
     return (encoded_hdr ## b_qc ## b_ac ## b_nsc ## b_arc ## qs'' ## as'' ## auths'' ## ars'')
  
 
-
+-- Simple wrapper function to allow us to create a DNS request
+public
+mkDNSRequest : Int -> 
+               List DomainFragment -> 
+               DNSQType -> 
+               DNSQClass -> 
+               DNSPacket
+mkDNSRequest req_id dom_frags qt qc = MkDNS hdr 1 0 0 0 [q] [] [] []
+  where hdr = (MkDNSHeader req_id False QUERY False False 
+              True True False False DNSResponseNoError)
+        q = (MkDNSQuestion dom_frags qt qc)
 -- runInit [(MkDNSState ptr [] len)] (parseDNSPacket pckt)
-
 

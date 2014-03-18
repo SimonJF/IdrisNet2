@@ -219,6 +219,7 @@ accept sock = do
 
 send : Socket -> String -> IO (Either SocketError ByteLength)
 send sock dat = do
+  putStrLn $ "Descriptor: " ++ (show $ descriptor sock)
   send_res <- mkForeign (FFun "idrnet_send" [FInt, FString] FInt) (descriptor sock) dat
   if send_res == (-1) then
     map Left getErrno
