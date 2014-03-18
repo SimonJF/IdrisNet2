@@ -9,7 +9,7 @@ import Network.Socket
 import DNSCodes
 
 %access public
-
+%default total
 
 
 -- Data representations of DNS Packets
@@ -149,13 +149,11 @@ dnsReference : PacketLang
 dnsReference = do tagCheck 1
                   bits 14
 
- --                 check (((val tag1) == 1) && ((val tag2) == 1))
--- nullterm or...
-dnsLabel : PacketLang
+dnsLabel: PacketLang
 dnsLabel = do tagCheck 0
               len <- bits 6
               let vl = (val len)
-              prf <- check (vl /= 0) 
+              check (vl /= 0)
               listn (intToNat vl) (bits 8)
 
 
@@ -186,20 +184,13 @@ dnsPayloadLang NS_VAL IN_VAL = dnsDomain
 dnsPayloadLang AAAA_VAL IN_VAL = null
 dnsPayloadLang _ _ = null
 -}
-dnsPayloadLang : (ty : Int) -> (cls : Int) -> PacketLang
-dnsPayloadLang 1 1 = dnsIP
-dnsPayloadLang 2 1 = dnsDomain
-dnsPayloadLang 5 1 = dnsDomain
-dnsPayloadLang 28 1 = null
+
+dnsPayloadLang : DNSType -> DNSClass -> PacketLang
+dnsPayloadLang DNSTypeA DNSClassIN = dnsIP
+dnsPayloadLang DNSTypeAAAA DNSClassIN = null 
+dnsPayloadLang DNSTypeNS DNSClassIN = dnsDomain
+dnsPayloadLang DNSTypeCNAME DNSClassIN = dnsDomain
 dnsPayloadLang _ _ = null
-
-
-payloadType' : DNSType -> DNSClass -> PacketLang
-payloadType' DNSTypeA DNSClassIN = dnsIP
-payloadType' DNSTypeAAAA DNSClassIN = null 
-payloadType' DNSTypeNS DNSClassIN = dnsDomain
-payloadType' DNSTypeCNAME DNSClassIN = dnsDomain
-payloadType' _ _ = null
 
 
 
@@ -221,6 +212,7 @@ dnsHeader =
 
 -- DNS Resource Record
 -- The same for answers, authorities and additional info.
+%assert_total
 dnsRR : PacketLang
 dnsRR = with PacketLang do 
            domain <- dnsDomain
@@ -228,8 +220,12 @@ dnsRR = with PacketLang do
            cls <- decodable 16 DNSClass dnsCodeToClass' dnsClassToCode' 
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
-           prf <- check ((val len) > 0)
-           payloadType' ty cls
+--            prf <- check ((val len) > 0)
+           let pl_lang = dnsPayloadLang ty cls
+           pl_data <- pl_lang
+           let data_len = (bitLength pl_lang pl_data) `div` 8
+           prop (prop_eq (val len) data_len)
+
 
 dns : PacketLang
 dns = with PacketLang do 

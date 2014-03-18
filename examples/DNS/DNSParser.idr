@@ -174,7 +174,7 @@ payloadType _ _ = Left PayloadUnimplemented
 
 total
 decodePayload : (pl_rel : DNSPayloadRel ty cl pl_ty) ->
-                (mkTy (payloadType' ty cl)) ->
+                (mkTy (dnsPayloadLang ty cl)) ->
                 { [DNSPARSER DNSState] }
                 Eff m (Either DNSParseError (DNSPayload pl_ty))
 decodePayload DNSPayloadRelIP ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
@@ -188,7 +188,7 @@ decodePayload _ _ = return $ Left (PayloadUnimplemented)
 parseDNSRecord : (mkTy dnsRR) ->
                  { [DNSPARSER DNSState] } 
                  Eff m (Either DNSParseError DNSRecord)
-parseDNSRecord (encoded_domain ## ty ## cls ## ttl ## len ## len_prf ## payload) = do
+parseDNSRecord (encoded_domain ## ty ## cls ## ttl ## len ## payload ## prf) = do
   let ttl' = val ttl
   domain <- (decodeDomain encoded_domain)
   case (payloadType ty cls) of
@@ -369,7 +369,7 @@ encodeIP _ = Left $ InternalEncodeError "Attempted to encode ipv6 address using 
 
 encodePayload : (rel : DNSPayloadRel ty cls pl_ty) -> 
                 (payload : DNSPayload pl_ty) ->
-                Either DNSEncodeError (mkTy (payloadType' ty cls))
+                Either DNSEncodeError (mkTy (dnsPayloadLang ty cls))
 --encodePayload {ty_code} {cls_code} rel ty_rel cls_rel = ?mv
 encodePayload DNSPayloadRelIP payload = encodeIP payload
 encodePayload DNSPayloadRelIP6 payload = Left UnsupportedPayloadType
@@ -379,7 +379,7 @@ encodePayload _ _ = Left UnsupportedPayloadType
 
 {-
 payloadLength : (rel : DNSPayloadRel ty cls pl_ty) ->
-                (payload : (mkTy (payloadType' ty cls))) ->
+                (payload : (mkTy (dnsPayloadLang ty cls))) ->
                 Either DNSEncodeError Int
 payloadLength DNSPayloadRelIP pl = Right $ bitLength _ pl
 
@@ -388,17 +388,18 @@ payloadLength DNSPayloadRelCNAME pl = encodeDomain payload
 payloadLength DNSPayloadRelNS pl = encodeDomain payload
 payloadLength _ _ = Left UnsupportedPayloadType
 -}
+%assert_total
 encodeRR : DNSRecord -> Either DNSEncodeError (mkTy dnsRR)
 encodeRR (MkDNSRecord name ty cls ttl rel pl) = with Monad do
   dom <- encodeDomain name
   b_ttl <- isBounded 32 (intToNat ttl)
   encoded_pl <- encodePayload rel pl
-  let pl_len = (bitLength (payloadType' ty cls) encoded_pl) `div` 8
+  let pl_len = (bitLength (dnsPayloadLang ty cls) encoded_pl) `div` 8
   b_len <- isBounded 16 (intToNat pl_len) -- This could be problematic... It would be nice to have this invariant encoded in the packetlang actually.
-  case choose ((val b_len) > 0) of
-    Left prf =>
-      return (dom ## ty ## cls ## b_ttl ## b_len ## prf ## encoded_pl)
-    Right _ => Left $ ProofConstructionError "Length may not be zero"
+  case decEq (val b_len) (bitLength (dnsPayloadLang ty cls) encoded_pl `div` 8) of
+    Yes p =>
+      Right (dom ## ty ## cls ## b_ttl ## b_len ## encoded_pl ## p)
+    No _ => Left $ ProofConstructionError "Length field not equal to payload length"
 
 public
 encodeDNS : DNSPacket -> Either DNSEncodeError (mkTy dns) -- Maybe (mkTy dns)
