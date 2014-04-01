@@ -16,21 +16,6 @@ instance Show DNSHdrOpcode where
   show QUERY = "QUERY"
   show IQUERY = "IQUERY"
   show STATUS = "STATUS"
-  
-
-{-
-data DNSHdrOpcodeRel : Int -> DNSHdrOpcode -> Type where
-  DNSHdrOpcodeRelQUERY : DNSHdrOpcodeRel 0 QUERY
-  DNSHdrOpcodeRelIQUERY : DNSHdrOpcodeRel 1 IQUERY
-  DNSHdrOpcodeRelSTATUS : DNSHdrOpcodeRel 2 STATUS
-
-
-dnsOpcodeRel : (code : Int) -> (ty : DNSHdrOpcode) -> Maybe (DNSHdrOpcodeRel code ty)
-dnsOpcodeRel 0 QUERY = Just DNSHdrOpcodeRelQUERY 
-dnsOpcodeRel 1 IQUERY = Just DNSHdrOpcodeRelIQUERY
-dnsOpcodeRel 2 STATUS = Just DNSHdrOpcodeRelSTATUS 
-dnsOpcodeRel _ _ = Nothing
--}
 
 dnsCodeToOpcode : Bounded 4 -> Maybe DNSHdrOpcode
 dnsCodeToOpcode (BInt 0 oh) = Just QUERY
@@ -372,18 +357,12 @@ dnsResponseToCode DNSResponseRefusedError = BInt 5 oh
 DomainFragment : Type
 DomainFragment = String
 
-data DNSPayloadType = DNSIPv4 | DNSIPv6 | DNSDomain | DNSUnimplementedPayload
+data DNSPayloadType = DNSIPv4 | DNSIPv6 | DNSDomain 
 
 data DNSPayload : DNSPayloadType -> Type where
-  -- TODO: It would be nice to specialise SocketAddress further, ideally
-  -- by declaring it as a GADT and parameterising it over the type of 
-  -- address. Not quite sure how that's going to work with the rest of
-  -- the code though...
   DNSIPv4Payload : SocketAddress -> DNSPayload DNSIPv4 
   DNSIPv6Payload : SocketAddress -> DNSPayload DNSIPv6
   DNSDomainPayload : List DomainFragment -> DNSPayload DNSDomain
-  DNSNotImplementedPayload : DNSPayload DNSUnimplementedPayload -- get out clause!
-
 
 data DNSPayloadRel : DNSType -> DNSClass -> DNSPayloadType -> Type where
   DNSPayloadRelIP : DNSPayloadRel DNSTypeA DNSClassIN DNSIPv4
@@ -397,34 +376,4 @@ showPayload DNSPayloadRelIP (DNSIPv4Payload addr) = "IPv4: " ++ (show addr)
 showPayload DNSPayloadRelIP6 (DNSIPv6Payload addr) = "IPv6 " ++ (show addr)
 showPayload DNSPayloadRelCNAME (DNSDomainPayload dom) = "Domain: " ++ show dom
 showPayload DNSPayloadRelNS (DNSDomainPayload dom) = "Domain: " ++ show dom
-
-
-
-{-
-getPayloadRel' : (ty_rel : DNSTypeRel ty_code ty) ->
-                 (cls_rel : DNSClassRel cls_code cls) ->
-                 Maybe (DNSPayloadRel ty cls pl_ty)
-getPayloadRel' {pl_ty = DNSIPv4} DNSTypeRelA DNSClassRelIN = Just DNSPayloadRelIP
-getPayloadRel' {pl_ty = DNSDomain} DNSTypeRelNS DNSClassRelIN = Just DNSPayloadRelNS 
-getPayloadRel' {pl_ty = DNSDomain} DNSTypeRelCNAME DNSClassRelIN = Just DNSPayloadRelCNAME
-getPayloadRel' {pl_ty = DNSIPv6} DNSTypeRelAAAA DNSClassRelIN = Just DNSPayloadRelIP6
-getPayloadRel' _ _ = Nothing
--}
-{-
-getPayloadRel' DNSTypeRelNULL cls_rel = ?mv_4
-getPayloadRel' DNSTypeRelPTR cls_rel = ?mv_5
-getPayloadRel' DNSTypeRelMX cls_rel = ?mv_6
-getPayloadRel' DNSTypeRelTXT cls_rel = ?mv_7
--}
-{-
-payloadType : DNSType -> DNSClass -> Type
-payloadType A IN = DNSPayload DNSIPv4
-payloadType AAAA IN = DNSPayload DNSIPv6
-payloadType NS IN = DNSPayload DNSDomain
-payloadType CNAME IN = DNSPayload DNSDomain
-payloadType _ _ = DNSPayload DNSUnimplementedPayload
--}
-
--- payloadType q
-
 

@@ -395,7 +395,7 @@ encodeRR (MkDNSRecord name ty cls ttl rel pl) = with Monad do
   b_ttl <- isBounded 32 (intToNat ttl)
   encoded_pl <- encodePayload rel pl
   let pl_len = (bitLength (dnsPayloadLang ty cls) encoded_pl) `div` 8
-  b_len <- isBounded 16 (intToNat pl_len) -- This could be problematic... It would be nice to have this invariant encoded in the packetlang actually.
+  b_len <- isBounded 16 (intToNat pl_len) 
   case decEq (val b_len) (bitLength (dnsPayloadLang ty cls) encoded_pl `div` 8) of
     Yes p =>
       Right (dom ## ty ## cls ## b_ttl ## b_len ## encoded_pl ## p)
