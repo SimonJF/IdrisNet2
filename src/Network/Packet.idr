@@ -293,7 +293,7 @@ marshal pl dat = do
   len <- marshal' (ActivePacketRes pckt 0 pckt_len) pl dat
   --putStrLn "Marshalling: "
   --dumpPacket pckt 1024
-  return (pckt, len)
+  return (pckt, len `div` 8)
 
 -- | Given a packet language and a BufPtr, unmarshals the packet
 public 

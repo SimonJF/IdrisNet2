@@ -156,6 +156,7 @@ instance Handler UDPServer IO where
 
   handle (UDPB sock) (UDPSWritePacket sa p pl dat) k = do
     (pckt, len) <- marshal pl dat
+    dumpPacket pckt (len * 8)
     send_res <- sendToBuf sock sa p pckt len
     case send_res of
          Left err => 

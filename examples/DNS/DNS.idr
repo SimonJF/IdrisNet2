@@ -9,7 +9,7 @@ import Network.Socket
 import DNSCodes
 
 %access public
-
+%default total
 
 
 -- Data representations of DNS Packets
@@ -104,29 +104,6 @@ instance Show DNSPacket where
     "Additionals: " ++ (show adds) ++ "\n"
   
 
---instance Show DNSPacket where
-  --show (MkDNS hdr qd an ns ar qs as auths adds) = 
-    -- "DNS Packet: \n" ++
-    
--- Verified implementation of the DNS packet specification
-
--- Validation of TYPE and QTYPE fields
-validTYPE : Int -> Bool
-validTYPE i = i >= 0 && i <= 16
-
-validQTYPE : Int -> Bool
-validQTYPE i = (validTYPE i) || (i >= 252 && i <= 255)
-
--- Validation of CLASS fields
-validCLASS : Int -> Bool
-validCLASS i = i >= 1 || i <= 4 -- In practice, this will only be 1..
-
-validQCLASS : Int -> Bool
-validQCLASS i = (validCLASS i) || i == 255
-
-validOpcode : Int -> Bool
-validOpcode i = i == 0 || i == 1 || i == 2
-
 nullterm : PacketLang
 nullterm = do nt <- bits 8
               check ((val nt) == 0)
@@ -149,13 +126,11 @@ dnsReference : PacketLang
 dnsReference = do tagCheck 1
                   bits 14
 
- --                 check (((val tag1) == 1) && ((val tag2) == 1))
--- nullterm or...
-dnsLabel : PacketLang
+dnsLabel: PacketLang
 dnsLabel = do tagCheck 0
               len <- bits 6
               let vl = (val len)
-              prf <- check (vl /= 0) 
+              check (vl /= 0)
               listn (intToNat vl) (bits 8)
 
 
@@ -168,10 +143,8 @@ dnsDomain = dnsReference // dnsLabels
 
 dnsQuestion : PacketLang
 dnsQuestion = do dnsDomain
-                 qtype <- bits 16
-                 check (validQTYPE (val qtype))
-                 qclass <- bits 16 
-                 check (validQCLASS (val qclass))
+                 decodable 16 DNSQType dnsCodeToQType dnsQTypeToCode
+                 decodable 16 DNSQClass dnsCodeToQClass dnsQClassToCode
 
 dnsIP : PacketLang
 dnsIP = do
@@ -188,31 +161,22 @@ dnsPayloadLang NS_VAL IN_VAL = dnsDomain
 dnsPayloadLang AAAA_VAL IN_VAL = null
 dnsPayloadLang _ _ = null
 -}
-dnsPayloadLang : (ty : Int) -> (cls : Int) -> PacketLang
-dnsPayloadLang 1 1 = dnsIP
-dnsPayloadLang 2 1 = dnsDomain
-dnsPayloadLang 5 1 = dnsDomain
-dnsPayloadLang 28 1 = null
+
+dnsPayloadLang : DNSType -> DNSClass -> PacketLang
+dnsPayloadLang DNSTypeA DNSClassIN = dnsIP
+dnsPayloadLang DNSTypeAAAA DNSClassIN = null 
+dnsPayloadLang DNSTypeNS DNSClassIN = dnsDomain
+dnsPayloadLang DNSTypeCNAME DNSClassIN = dnsDomain
 dnsPayloadLang _ _ = null
 
 
-payloadType' : DNSType -> DNSClass -> PacketLang
-payloadType' DNSTypeA DNSClassIN = dnsIP
-payloadType' DNSTypeAAAA DNSClassIN = null 
-payloadType' DNSTypeNS DNSClassIN = dnsDomain
-payloadType' DNSTypeCNAME DNSClassIN = dnsDomain
-payloadType' _ _ = null
 
-
-
--- abstract
 dnsHeader : PacketLang
 dnsHeader = 
   with PacketLang do 
      ident <- bits 16 -- Request identifier
      qr <- bool -- Query or response 
-     opcode <- bits 4 -- Which type of query? Only 0, 1 and 2 valid
-     check (validOpcode (val opcode))
+     opcode <- decodable 4 DNSHdrOpcode dnsCodeToOpcode dnsOpcodeToCode
      aa <- bool -- Only set in response, is responding server authority?
      tc <- bool -- Was message truncated?
      rd <- bool -- Recursion desired, set in query, copied into response
@@ -221,11 +185,11 @@ dnsHeader =
      check (not z)
      ans_auth <- bool
      auth_acceptable <- bool
-     resp <- bits 4 -- Response code, only 0-5 valid
-     check (validRespCode (val resp))
+     decodable 4 DNSResponse dnsCodeToResponse dnsResponseToCode
 
 -- DNS Resource Record
 -- The same for answers, authorities and additional info.
+%assert_total
 dnsRR : PacketLang
 dnsRR = with PacketLang do 
            domain <- dnsDomain
@@ -233,9 +197,11 @@ dnsRR = with PacketLang do
            cls <- decodable 16 DNSClass dnsCodeToClass' dnsClassToCode' 
            ttl <- bits 32
            len <- bits 16 -- Length in octets of next field
-           let vl = ((val len) * 8)
-           prf <- check (vl > 0)
-           payloadType' ty cls
+           let pl_lang = dnsPayloadLang ty cls
+           pl_data <- pl_lang
+           let data_len = (bitLength pl_lang pl_data) `div` 8
+           prop (prop_eq (val len) data_len)
+
 
 dns : PacketLang
 dns = with PacketLang do 

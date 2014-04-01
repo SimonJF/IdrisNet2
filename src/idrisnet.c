@@ -3,6 +3,20 @@
 // MIT Licensed. Have fun!
 #include "idrisnet.h"
 
+void buf_htonl(void* buf, int len) {
+    int* buf_i = (int*) buf;
+    for (int i = 0; i < len / sizeof(int) + 1; i++) {
+        buf_i[i] = htonl(buf_i[i]);
+    }
+}
+
+void buf_ntohl(void* buf, int len) {
+    int* buf_i = (int*) buf;
+    for (int i = 0; i < len / sizeof(int) + 1; i++) {
+        buf_i[i] = ntohl(buf_i[i]);
+    }
+}
+
 void* idrnet_malloc(int size) {
     return malloc(size);
 }
@@ -44,8 +58,8 @@ int idrnet_bind(int sockfd, int family, int socket_type, char* host, int port) {
     }
 
     int bind_res = bind(sockfd, address_res->ai_addr, address_res->ai_addrlen);
-    freeaddrinfo(address_res);
     if (bind_res == -1) {
+        //freeaddrinfo(address_res);
         return -1;
     } 
     return 0;
@@ -103,14 +117,19 @@ int idrnet_send(int sockfd, char* data) {
 }
 
 int idrnet_send_buf(int sockfd, void* data, int len) {
-    return send(sockfd, data, len, 0);
+    void* buf_cpy = malloc(len);
+    buf_htonl(buf_cpy, len);
+    memcpy(data, buf_cpy, len);
+    int res = send(sockfd, buf_cpy, len, 0);
+    free(buf_cpy);
+    return res;
 }
 
 void* idrnet_recv(int sockfd, int len) {
     idrnet_recv_result* res_struct = 
         (idrnet_recv_result*) malloc(sizeof(idrnet_recv_result));
-
     char* buf = malloc(len + 1);
+    memset(buf, 0, len + 1);
     int recv_res = recv(sockfd, buf, len, 0);
     res_struct->result = recv_res;
     
@@ -122,7 +141,11 @@ void* idrnet_recv(int sockfd, int len) {
 }
 
 int idrnet_recv_buf(int sockfd, void* buf, int len) {
-    return recv(sockfd, buf, len, 0);
+    int recv_res = recv(sockfd, buf, len, 0);
+    if (recv_res != -1) {
+        buf_ntohl(buf, len);
+    }
+    return recv_res;
 }
 
 int idrnet_get_recv_res(void* res_struct) {
@@ -166,12 +189,19 @@ int idrnet_sendto_buf(int sockfd, void* buf, int buf_len, char* host, int port, 
     struct addrinfo* remote_host;
     int addr_res = idrnet_getaddrinfo(&remote_host, host, port, family, SOCK_DGRAM);
     if (addr_res == -1) {
+        perror("sendto getaddrinfo");
         return -1;
     } 
 
+ //   printf("Arguments sockfd %d, buf ptr %p, buf len %d, host %s, port %d, family %d, remote_host %p, remote sockaddr reloaded %s, remote sockaddr len %d\n",
+   //         sockfd, buf, buf_len, host, port, family, remote_host, idrnet_sockaddr_ipv4(remote_host->ai_addr), remote_host->ai_addrlen);
+    buf_htonl(buf, buf_len);
     int send_res = sendto(sockfd, buf, buf_len, 0, 
                         remote_host->ai_addr, remote_host->ai_addrlen);
-    freeaddrinfo(remote_host);
+    if (send_res == -1) {
+        perror("sendto");
+    }
+    //freeaddrinfo(remote_host);
     return send_res;
 }
 
@@ -231,6 +261,7 @@ void* idrnet_recvfrom_buf(int sockfd, void* buf, int len) {
     // Payload will be NULL -- since it's been put into the user-specified buffer. We
     // still need the return struct to get our hands on the remote address, though.
     if (recv_res > 0) {
+        buf_ntohl(buf, len);
         ret->payload = NULL;
         ret->remote_addr = remote_addr;
     }

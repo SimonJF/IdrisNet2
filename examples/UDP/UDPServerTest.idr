@@ -13,6 +13,11 @@ udpServerLoop (S k) = do
   case !(udpReadString 1024) of
     UDPSuccess (addr, str, _) => do
       putStr ("Received: " ++ str ++ "from " ++ (show (remote_addr addr)) ++ "\n")
+      UDPSuccess _ <- udpWriteString (IPv4Addr 127 0 0 1) 9001 "pines test"
+        | UDPFailure err => do putStr ("Error!" ++ (show err))
+                               udpFinalise
+        | UDPRecoverableError err => do putStr ("Error!" ++ (show err))
+                                        udpClose
       udpServerLoop k
     UDPRecoverableError _ => udpServerLoop (S k)
     UDPFailure err => do

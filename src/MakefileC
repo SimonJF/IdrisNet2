@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = `idris --include`
+CFLAGS = -Wall -std=gnu99 `idris --include` 
 
 all : idrisnet.o bindata.o
 
