@@ -149,12 +149,17 @@ socket sf st pn = do
 close : Socket -> IO ()
 close sock = mkForeign (FFun "close" [FInt] FUnit) (descriptor sock)
 
+private
+saString : (Maybe SocketAddress) -> String
+saString (Just sa) = show sa
+saString Nothing = ""
+
 -- Binds a socket to the given socket address and port.
 -- Returns 0 on success, an error code otherwise.
-bind : Socket -> SocketAddress -> Port -> IO Int
+bind : Socket -> (Maybe SocketAddress) -> Port -> IO Int
 bind sock addr port = do
   bind_res <- (mkForeign (FFun "idrnet_bind" [FInt, FInt, FInt, FString, FInt] FInt) 
-                           (descriptor sock) (toCode $ family sock) (toCode $ socketType sock) (show addr) port)
+                           (descriptor sock) (toCode $ family sock) (toCode $ socketType sock) (saString addr) port)
   if bind_res == (-1) then -- error
     getErrno
   else return 0 -- Success
@@ -339,7 +344,7 @@ recvFromBuf sock (BPtr ptr) bl = do
       port <- foreignGetRecvfromPort recv_ptr'
       addr <- foreignGetRecvfromAddr recv_ptr'
       freeRecvfromStruct recv_ptr'
-      return $ Right (MkUDPAddrInfo addr port, result)
+      return $ Right (MkUDPAddrInfo addr port, result + 1)
 
   
 

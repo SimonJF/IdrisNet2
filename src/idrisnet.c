@@ -5,14 +5,14 @@
 
 void buf_htonl(void* buf, int len) {
     int* buf_i = (int*) buf;
-    for (int i = 0; i < len / sizeof(int) + 1; i++) {
+    for (int i = 0; i < (len / sizeof(int)) + 1; i++) {
         buf_i[i] = htonl(buf_i[i]);
     }
 }
 
 void buf_ntohl(void* buf, int len) {
     int* buf_i = (int*) buf;
-    for (int i = 0; i < len / sizeof(int) + 1; i++) {
+    for (int i = 0; i < (len / sizeof(int)) + 1; i++) {
         buf_i[i] = ntohl(buf_i[i]);
     }
 }
@@ -44,6 +44,10 @@ int idrnet_getaddrinfo(struct addrinfo** address_res, char* host, int port,
     // then we want to instruct the C library to fill in the IP automatically
     if (strlen(host) == 0) {
         hints.ai_flags = AI_PASSIVE; // fill in IP automatically
+        printf("Lib: getaddringo -- strlen host 0len, so set AI_PASSIVE\n");
+        return getaddrinfo(NULL, str_port, &hints, address_res);
+    } else {
+        printf("Lib: getaddrinfo -- strlen host not 0 len: %s\n", host);
     }
 
     return getaddrinfo(host, str_port, &hints, address_res);
@@ -54,12 +58,14 @@ int idrnet_bind(int sockfd, int family, int socket_type, char* host, int port) {
     struct addrinfo* address_res;
     int addr_res = idrnet_getaddrinfo(&address_res, host, port, family, socket_type);
     if (addr_res == -1) {
+        printf("Lib err: bind getaddrinfo\n");
         return -1;
     }
 
     int bind_res = bind(sockfd, address_res->ai_addr, address_res->ai_addrlen);
     if (bind_res == -1) {
         //freeaddrinfo(address_res);
+        printf("Lib err: bind\n");
         return -1;
     } 
     return 0;
@@ -118,8 +124,8 @@ int idrnet_send(int sockfd, char* data) {
 
 int idrnet_send_buf(int sockfd, void* data, int len) {
     void* buf_cpy = malloc(len);
-    buf_htonl(buf_cpy, len);
     memcpy(data, buf_cpy, len);
+    buf_htonl(buf_cpy, len);
     int res = send(sockfd, buf_cpy, len, 0);
     free(buf_cpy);
     return res;
@@ -189,7 +195,7 @@ int idrnet_sendto_buf(int sockfd, void* buf, int buf_len, char* host, int port, 
     struct addrinfo* remote_host;
     int addr_res = idrnet_getaddrinfo(&remote_host, host, port, family, SOCK_DGRAM);
     if (addr_res == -1) {
-        perror("sendto getaddrinfo");
+        printf("lib err: sendto getaddrinfo \n");
         return -1;
     } 
 
@@ -199,7 +205,7 @@ int idrnet_sendto_buf(int sockfd, void* buf, int buf_len, char* host, int port, 
     int send_res = sendto(sockfd, buf, buf_len, 0, 
                         remote_host->ai_addr, remote_host->ai_addrlen);
     if (send_res == -1) {
-        perror("sendto");
+        perror("lib err: sendto \n");
     }
     //freeaddrinfo(remote_host);
     return send_res;
@@ -221,7 +227,7 @@ void* idrnet_recvfrom(int sockfd, int len) {
     memset(remote_addr, 0, sizeof(remote_addr));
     memset(buf, 0, len + 1);
     memset(ret, 0, sizeof(idrnet_recvfrom_result));
-    int fromlen = sizeof(struct sockaddr_storage);
+    socklen_t fromlen = sizeof(struct sockaddr_storage);
 
     int recv_res = recvfrom(sockfd, buf, len, 0, (struct sockaddr*) remote_addr, &fromlen);
     ret->result = recv_res;
@@ -288,6 +294,7 @@ int idrnet_get_recvfrom_port(void* res_struct) {
             (struct sockaddr_in*) recv_struct->remote_addr;
         return ((int) ntohs(remote_addr_in->sin_port));
     }
+    return -1;
 }
 
 void idrnet_free_recvfrom_struct(void* res_struct) {

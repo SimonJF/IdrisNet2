@@ -22,12 +22,9 @@ natToInt : Nat -> Int
 natToInt Z = 0
 natToInt (S k) = 1 + (natToInt k)
 
--- FIXME: This is a horrible, horrible, horrible, horrible falsehood.
--- But for now, it'll do.
-%assert_total
 intToNat : Int -> Nat
 intToNat 0 = Z
-intToNat i = S (intToNat (i - 1))
+intToNat i = if i < 0 then Z else (assert_total (S (intToNat (i - 1))))
 
 strLen : String -> Int
 strLen s = natToInt $ length s
@@ -41,7 +38,11 @@ instance Show (Bounded i) where
 val : Bounded i -> Int
 val (BInt i p) = i
 
-
+mkBounded : (bound : Nat) -> Int -> Maybe (Bounded bound)
+mkBounded b i_n = 
+  case choose (i_n < (pow 2 b)) of
+      Left yes => Just (BInt i_n yes)
+      Right _ => Nothing 
 
 -- Primitive Binary Chunks
 data Chunk : Type where

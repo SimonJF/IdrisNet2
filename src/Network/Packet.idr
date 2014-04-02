@@ -172,19 +172,22 @@ unmarshalLString : ActivePacket -> Nat -> IO String
 unmarshalLString ap n = map pack (unmarshalLString' ap n)
 
 unmarshalBits : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
-unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + (natToInt width)) <= p_len)
+unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + (natToInt width) - 1) <= p_len)
   | True = do
     res <- foreignGetBits pckt pos (pos + (natToInt width) - 1)
-   --  putStrLn $ "Read: " ++ show res
+    putStrLn $ "Read: " ++ show res
     return $ Just $ (BInt res (believe_me oh), (natToInt width)) -- Have to trust it, as it's from C
-  | False = return Nothing
+  | False = putStrLn ("Ballsed up unmarshalling a bit. Pos: " ++ (show pos) ++ 
+                         "nti width: " ++ (show (natToInt width)) ++ " p_len " ++ (show p_len) ++ 
+                         "predicate: " ++ (show $ pos + (natToInt width) - 1)) $> return Nothing
 
 unmarshalBool : ActivePacket -> IO (Maybe (Bool, Length))
-unmarshalBool (ActivePacketRes pckt pos p_len) with ((pos + 1) <= p_len)
+unmarshalBool (ActivePacketRes pckt pos p_len) with (pos <= p_len)
   | True = do
       res <- foreignGetBits pckt pos pos
+      putStrLn $ "Read: " ++ show (res == 1)
       return $ Just (res == 1, 1)
-  | False = return Nothing
+  | False = putStrLn "Ballsed up unmarshalling a bool" $> return Nothing
 
 unmarshalProp : (p : Proposition) -> Maybe (propTy p)
 unmarshalProp (P_EQ x y) = 
@@ -291,9 +294,9 @@ marshal pl dat = do
   let pckt_len = bitLength pl dat
   pckt <- foreignCreatePacket pckt_len
   len <- marshal' (ActivePacketRes pckt 0 pckt_len) pl dat
-  --putStrLn "Marshalling: "
-  --dumpPacket pckt 1024
-  return (pckt, len `div` 8)
+  putStrLn "Marshalling: "
+  dumpPacket pckt 1024
+  return (pckt, (len `div` 8) + 1)
 
 -- | Given a packet language and a BufPtr, unmarshals the packet
 public 
