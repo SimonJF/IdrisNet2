@@ -176,8 +176,10 @@ instance Handler TCPServerClient IO where
 
 data TCPServer : Effect where
   -- TCPServerBind a socket to a given address and port
-  TCPServerBind : SocketAddress -> Port -> { () ==> interpTCPServerBindRes result }
-                                  TCPServer (SocketOperationRes ()) 
+  TCPServerBind : (Maybe SocketAddress) -> 
+                  Port -> 
+                  { () ==> interpTCPServerBindRes result }
+                   TCPServer (SocketOperationRes ()) 
   -- Listen
   Listen : { ServerBound ==> interpListenRes result } 
            TCPServer (SocketOperationRes ()) 
@@ -199,8 +201,10 @@ TCPSERVER t = MkEff t TCPServer
 
 {- TCP Accessor Functions -}
 
-bind : SocketAddress -> Port -> { [TCPSERVER ()] ==> [TCPSERVER (interpTCPServerBindRes result)] } 
-                                Eff IO (SocketOperationRes ())
+bind : (Maybe SocketAddress) -> 
+       Port -> { [TCPSERVER ()] ==> 
+                 [TCPSERVER (interpTCPServerBindRes result)] } 
+                Eff IO (SocketOperationRes ())
 bind sa p = (TCPServerBind sa p)
 
 listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] } 

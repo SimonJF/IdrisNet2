@@ -29,7 +29,7 @@ interpUDPOperationRes (UDPFailure _ ) = UDPError
 interpUDPOperationRes (UDPRecoverableError _) = UDPBound
 
 data UDPServer : Effect where
-  UDPSBind : SocketAddress -> 
+  UDPSBind : (Maybe SocketAddress) -> 
              Port -> 
              { () ==> interpUDPBindRes result } 
              UDPServer (UDPRes ())
@@ -69,7 +69,7 @@ data UDPServer : Effect where
 UDPSERVER : Type -> EFFECT
 UDPSERVER t = MkEff t UDPServer
 
-udpBind : SocketAddress -> 
+udpBind : (Maybe SocketAddress) -> 
           Port -> 
           { [UDPSERVER ()] ==> [UDPSERVER (interpUDPBindRes result)] }
           Eff IO (UDPRes ())
