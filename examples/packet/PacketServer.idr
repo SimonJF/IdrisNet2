@@ -3,10 +3,10 @@ module Main
 import Effects
 import Effect.StdIO
 
-import Network.Packet
-import Network.PacketLang
-import Network.Socket
-import Network.TCP.TCPServer
+import IdrisNet.Packet
+import IdrisNet.PacketLang
+import IdrisNet.Socket
+import IdrisNet.TCP.TCPServer
 
 import PacketStruct
 
@@ -57,16 +57,16 @@ clientTask' = do
 clientTask : ClientProgram ()
 clientTask = new clientTask'
 
-packetServer : SocketAddress -> Port -> { [TCPSERVER (), STDIO] } Eff IO ()
-packetServer sa p = do
-  OperationSuccess _ <- bind sa p
+packetServer : Port -> { [TCPSERVER (), STDIO] } Eff IO ()
+packetServer p = do
+  OperationSuccess _ <- bind Nothing p
     | RecoverableError err => return ()
     | FatalError err => do (putStr $ "Error binding: " ++ (show err))
                            return ()
     | ConnectionClosed => return ()
   OperationSuccess _ <- listen 
     | RecoverableError _ => closeBound
-    | FatalError err => do 
+    | FatalError err => do
         putStr ("Error listening: " ++ (show err))
         finaliseServer
     | ConnectionClosed => return ()
@@ -78,4 +78,4 @@ packetServer sa p = do
   closeListening
 
 main : IO ()
-main = run (packetServer (IPv4Addr 127 0 0 1) 1234)
+main = run (packetServer 1234)

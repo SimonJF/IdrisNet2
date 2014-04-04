@@ -5,16 +5,16 @@ module Main
 import GameState
 import GameMessage 
 
-import Network.Socket
-import Network.UDP.UDPServer
-import Network.UDP.UDPClient
+import IdrisNet.Socket
+import IdrisNet.UDP.UDPServer
+import IdrisNet.UDP.UDPClient
 
 import Effects
+import Effect.Process
 import Effect.SDL
 import Effect.State
 import Effect.StdIO
 
-import Process
 
 import System
 
@@ -46,12 +46,12 @@ networkHandlerThread' : (mthread : ProcPID GameMessage) ->
                          [UDPSERVER UDPBound, STDIO] 
                          [UDPSERVER (), STDIO] 
 networkHandlerThread' pid = with Effects do
-  UDPSuccess (_, Just (pckt, _)) <- Network.UDP.UDPServer.udpReadPacket statusUpdate 256
+  UDPSuccess (_, Just (pckt, _)) <- IdrisNet.UDP.UDPServer.udpReadPacket statusUpdate 256
     | UDPSuccess (_, Nothing) => do putStr "Error decoding status packet\n"
                                     networkHandlerThread' pid
-    | UDPFailure err => do Network.UDP.UDPServer.udpFinalise 
+    | UDPFailure err => do IdrisNet.UDP.UDPServer.udpFinalise 
                            return ()
-    | UDPRecoverableError err => do Network.UDP.UDPServer.udpClose 
+    | UDPRecoverableError err => do IdrisNet.UDP.UDPServer.udpClose 
                                     return ()
   let msg = mkMessage pckt
   sendMessage pid msg

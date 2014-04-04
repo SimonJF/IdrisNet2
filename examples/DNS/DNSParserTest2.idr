@@ -1,9 +1,9 @@
 import Effects
 import Effect.StdIO
-import Network.UDP.UDPServer
+import IdrisNet.UDP.UDPServer
 import DNSParser
 import DNS
-import Network.Socket 
+import IdrisNet.Socket 
 
 recvAndParse : { [UDPSERVER UDPBound, STDIO, DNSPARSER ()] ==>
                  [UDPSERVER (), STDIO, DNSPARSER()] } Eff IO ()
@@ -24,13 +24,13 @@ recvAndParse = do
     UDPRecoverableError err => do putStr $ "Error receiving: " ++ (show err) ++ "\n"
                                   udpClose
 
-dnsRespTest : SocketAddress -> Port -> { [UDPSERVER (), STDIO, DNSPARSER ()] } Eff IO ()
-dnsRespTest addr port = 
-  case !(udpBind addr port) of
+dnsRespTest : Port -> { [UDPSERVER (), STDIO, DNSPARSER ()] } Eff IO ()
+dnsRespTest port = 
+  case !(udpBind Nothing port) of
     UDPSuccess _ => recvAndParse
     UDPFailure err => putStr ("Error connecting: " ++ (show err)) 
     UDPRecoverableError err => putStr ("Error connecting: " ++ (show err)) 
 
 
 main : IO ()
-main = run (dnsRespTest (IPv4Addr 127 0 0 1) 4099)
+main = run (dnsRespTest 4099)

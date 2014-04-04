@@ -1,6 +1,6 @@
 module DNSParser
-import Network.Packet
-import Network.PacketLang
+import IdrisNet.Packet
+import IdrisNet.PacketLang
 import DNS
 import Effects
 import Effect.State
@@ -63,9 +63,13 @@ unmarshalReference' : BufPtr ->
 unmarshalReference' pckt pos p_len = with Monad do
   let res = unmarshal' (ActivePacketRes pckt pos p_len) dnsLabels
   case res of
-    Just (lbls ## _, res_len) => do 
+    Just (lbls ## (Left nt), res_len) => do 
       let res = map unmarshalLabel lbls
       return $ Just res
+    Just (lbls ## (Right (_ ## ref)), res_len) => do
+      let res = map unmarshalLabel lbls
+      rest <- unmarshalReference' pckt ((val ref) * 8) p_len
+      return $ [| (Just res) ++ rest |]
       --return $ Just (pack $ map (chr . val) xs) (doesn't work for some reason)
     Nothing => return Nothing
 
@@ -160,6 +164,7 @@ getPayloadRel DNSIPv4 DNSTypeA DNSClassIN = Right DNSPayloadRelIP
 getPayloadRel DNSIPv6 DNSTypeAAAA DNSClassIN = Right DNSPayloadRelIP6
 getPayloadRel DNSDomain DNSTypeCNAME DNSClassIN = Right DNSPayloadRelCNAME
 getPayloadRel DNSDomain DNSTypeNS DNSClassIN = Right DNSPayloadRelNS
+getPayloadRel DNSSOA DNSTypeSOA DNSClassIN = Right DNSPayloadRelSOA
 getPayloadRel _ _ _ = Left PayloadUnimplemented
 
 
@@ -168,9 +173,21 @@ payloadType DNSTypeA DNSClassIN = Right DNSIPv4
 payloadType DNSTypeAAAA DNSClassIN = Right DNSIPv6
 payloadType DNSTypeNS DNSClassIN =  Right DNSDomain
 payloadType DNSTypeCNAME DNSClassIN = Right DNSDomain
+payloadType DNSTypeSOA DNSClassIN = Right DNSSOA
 payloadType _ _ = Left PayloadUnimplemented
 
-
+decodeSOAPayload : (mkTy dnsSOA) ->
+                   { [DNSPARSER DNSState] } 
+                    Eff m (Either DNSParseError (DNSPayload DNSSOA))
+decodeSOAPayload (mn ## rn ## ser ## ref ## ret ## exp ## min) = do
+  mn' <- decodeDomain mn
+  rn' <- decodeDomain rn
+  case (mn', rn') of
+    (Right mn'', Right rn'') =>
+      return $ Right (DNSSOAPayload (MkSOA mn'' rn'' (val ser) (val ref) 
+                        (val ret)  (val exp)  (val min)))
+    (Left err, _) => return $ Left err
+    (_, Left err) => return $ Left err
 
 total
 decodePayload : (pl_rel : DNSPayloadRel ty cl pl_ty) ->
@@ -180,6 +197,7 @@ decodePayload : (pl_rel : DNSPayloadRel ty cl pl_ty) ->
 decodePayload DNSPayloadRelIP ip_pl = return $ Right (DNSIPv4Payload (decodeIP ip_pl))
 decodePayload DNSPayloadRelCNAME dom_pl = decodeDomainPayload dom_pl
 decodePayload DNSPayloadRelNS dom_pl = decodeDomainPayload dom_pl
+decodePayload DNSPayloadRelSOA soa_pl = decodeSOAPayload soa_pl
 decodePayload _ _ = return $ Left (PayloadUnimplemented)
  
 
@@ -366,6 +384,16 @@ encodeIP (DNSIPv4Payload (IPv4Addr i1 i2 i3 i4)) = with Monad do
 encodeIP _ = Left $ InternalEncodeError "Attempted to encode ipv6 address using ipv4 function"
 
 
+encodeSOA : DNSSoA -> Either DNSEncodeError (mkTy dnsSOA)
+encodeSOA soa = do
+  mname <- encodeDomain (dnsSOAMName soa)
+  rname <- encodeDomain (dnsSOARName soa)
+  serial <- isBounded 32 (intToNat $ dnsSOASerial soa)
+  refresh <- isBounded 32 (intToNat $ dnsSOASerial soa)
+  retry <- isBounded 32 (intToNat $ dnsSOASerial soa)
+  expire <- isBounded 32 (intToNat $ dnsSOASerial soa)
+  minimum <- isBounded 32 (intToNat $ dnsSOASerial soa)
+  return $ (mname ## rname ## serial ## refresh ## retry ## expire ## minimum)
 
 encodePayload : (rel : DNSPayloadRel ty cls pl_ty) -> 
                 (payload : DNSPayload pl_ty) ->
@@ -375,6 +403,7 @@ encodePayload DNSPayloadRelIP payload = encodeIP payload
 encodePayload DNSPayloadRelIP6 payload = Left UnsupportedPayloadType
 encodePayload DNSPayloadRelCNAME (DNSDomainPayload payload) = encodeDomain payload
 encodePayload DNSPayloadRelNS (DNSDomainPayload payload) = encodeDomain payload
+encodePayload DNSPayloadRelSOA (DNSSOAPayload payload) = encodeSOA payload
 encodePayload _ _ = Left UnsupportedPayloadType
 
 {-

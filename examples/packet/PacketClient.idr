@@ -3,10 +3,10 @@ module Main
 import Effects
 import Effect.StdIO
 
-import Network.Packet
-import Network.PacketLang
-import Network.Socket
-import Network.TCP.TCPClient
+import IdrisNet.Packet
+import IdrisNet.PacketLang
+import IdrisNet.Socket
+import IdrisNet.TCP.TCPClient
 
 import PacketStruct
 

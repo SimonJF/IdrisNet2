@@ -1,8 +1,8 @@
 module Main
 import Effects
 import Effect.StdIO
-import Network.Socket
-import Network.UDP.UDPServer
+import IdrisNet.Socket
+import IdrisNet.UDP.UDPServer
 
 udpServerLoop : Nat -> 
                 { [UDPSERVER UDPBound, STDIO] ==> 
@@ -24,16 +24,15 @@ udpServerLoop (S k) = do
       putStr ("Error: " ++ (show err) ++ "\n")
       udpFinalise
 
-udpBindAndLoop : SocketAddress -> 
-                 Port ->
+udpBindAndLoop : Port ->
                  { [UDPSERVER (), STDIO] }
                  Eff IO ()
-udpBindAndLoop sa p = do
-  case !(udpBind sa p) of
+udpBindAndLoop p = do
+  case !(udpBind Nothing p) of
     UDPSuccess _ => udpServerLoop 5
     UDPRecoverableError err => putStr ("Error binding: " ++ (show err) ++ "\n")
     UDPFailure err => putStr ("Error binding: " ++ (show err) ++ "\n")
 
 
 main : IO ()
-main = run (udpBindAndLoop (IPv4Addr 127 0 0 1) 4099)
+main = run (udpBindAndLoop 4099)

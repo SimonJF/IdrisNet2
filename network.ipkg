@@ -1,15 +1,16 @@
 package network
 
 sourcedir = src
-modules = Network.Packet, 
-          Network.PacketLang, 
-          Network.Socket, 
-          Network.TCP.TCPClient, 
-          Network.TCP.TCPCommon, 
-          Network.TCP.TCPServer,
-          Network.UDP.UDPClient,
-          Network.UDP.UDPCommon,
-          Network.UDP.UDPServer
+modules = IdrisNet.Packet, 
+          IdrisNet.PacketLang, 
+          IdrisNet.Socket, 
+          IdrisNet.TCP.TCPClient, 
+          IdrisNet.TCP.TCPCommon, 
+          IdrisNet.TCP.TCPServer,
+          IdrisNet.UDP.UDPClient,
+          IdrisNet.UDP.UDPCommon,
+          IdrisNet.UDP.UDPServer,
+          Effect.Process
 opts = "-p effects"
 makefile = MakefileC
 

@@ -4,8 +4,8 @@
 -- PacketLang representations:
 module DNS
 
-import Network.PacketLang
-import Network.Socket
+import IdrisNet.PacketLang
+import IdrisNet.Socket
 import DNSCodes
 
 %access public
@@ -94,6 +94,7 @@ record DNSPacket : Type where
 instance Show DNSPacket where
   show (MkDNS hdr qdc anc nsc arc qs as auths adds) = 
     "DNS Packet: " ++ "\n" ++
+    "Header: " ++ (show hdr) ++ "\n" ++
     "QD Count: " ++ (show qdc) ++ "\n" ++
     "AN Count: " ++ (show anc) ++ "\n" ++
     "NS Count: " ++ (show nsc) ++ "\n" ++
@@ -102,11 +103,11 @@ instance Show DNSPacket where
     "Answers: " ++ (show as) ++ "\n" ++
     "Authorities: " ++ (show auths) ++ "\n" ++
     "Additionals: " ++ (show adds) ++ "\n"
-  
 
 nullterm : PacketLang
-nullterm = do nt <- bits 8
-              check ((val nt) == 0)
+nullterm = with PacketLang do 
+  nt <- bits 8
+  check ((val nt) == 0)
 
 validRespCode : Int -> Bool
 validRespCode i = i >= 0 && i <= 5
@@ -115,58 +116,65 @@ validRespCode i = i >= 0 && i <= 5
 -- These take the form of two octets, the first two bits of which 
 -- are 11. The rest is 14 bits.
 tagCheck : Int -> PacketLang
-tagCheck i = do tag1 <- bits 1
-                tag2 <- bits 1
-                let v1 = val tag1
-                let v2 = val tag2
-                prop (prop_eq v1 i)
-                prop (prop_eq v2 i)
+tagCheck i = with PacketLang do 
+  tag1 <- bits 1
+  tag2 <- bits 1
+  let v1 = val tag1
+  let v2 = val tag2
+  prop (prop_eq v1 i)
+  prop (prop_eq v2 i)
 
 dnsReference : PacketLang
-dnsReference = do tagCheck 1
-                  bits 14
+dnsReference = with PacketLang do 
+  tagCheck 1
+  bits 14
 
 dnsLabel: PacketLang
-dnsLabel = do tagCheck 0
-              len <- bits 6
-              let vl = (val len)
-              check (vl /= 0)
-              listn (intToNat vl) (bits 8)
-
+dnsLabel = with PacketLang do 
+  tagCheck 0
+  len <- bits 6
+  let vl = (val len)
+  check (vl /= 0)
+  listn (intToNat vl) (bits 8)
 
 dnsLabels : PacketLang
-dnsLabels = do list dnsLabel
-               nullterm // dnsReference
+dnsLabels = with PacketLang do 
+  list dnsLabel
+  nullterm // dnsReference
 
 dnsDomain : PacketLang
 dnsDomain = dnsReference // dnsLabels
 
 dnsQuestion : PacketLang
-dnsQuestion = do dnsDomain
-                 decodable 16 DNSQType dnsCodeToQType dnsQTypeToCode
-                 decodable 16 DNSQClass dnsCodeToQClass dnsQClassToCode
+dnsQuestion = with PacketLang do 
+  dnsDomain
+  decodable 16 DNSQType dnsCodeToQType dnsQTypeToCode
+  decodable 16 DNSQClass dnsCodeToQClass dnsQClassToCode
 
 dnsIP : PacketLang
-dnsIP = do
+dnsIP = with PacketLang do
   bits 8
   bits 8
   bits 8
   bits 8
 
-{-  Pending compiler bugfix...
-dnsPayloadLang : (ty : Int) -> (cls : Int) -> PacketLang
-dnsPayloadLang A_VAL IN_VAL = dnsIP
-dnsPayloadLang CNAME_VAL IN_VAL = dnsDomain
-dnsPayloadLang NS_VAL IN_VAL = dnsDomain
-dnsPayloadLang AAAA_VAL IN_VAL = null
-dnsPayloadLang _ _ = null
--}
+dnsSOA : PacketLang
+dnsSOA = with PacketLang do
+  mname <- dnsDomain 
+  rname <- dnsDomain
+  serial <- bits 32
+  refresh <- bits 32
+  retry <- bits 32
+  expire <- bits 32
+  bits 32 -- minimum
+
 
 dnsPayloadLang : DNSType -> DNSClass -> PacketLang
 dnsPayloadLang DNSTypeA DNSClassIN = dnsIP
 dnsPayloadLang DNSTypeAAAA DNSClassIN = null 
 dnsPayloadLang DNSTypeNS DNSClassIN = dnsDomain
 dnsPayloadLang DNSTypeCNAME DNSClassIN = dnsDomain
+dnsPayloadLang DNSTypeSOA DNSClassIN = dnsSOA
 dnsPayloadLang _ _ = null
 
 

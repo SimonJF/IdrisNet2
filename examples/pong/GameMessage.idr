@@ -1,20 +1,18 @@
 module GameMessage
 import GameState
-import Network.PacketLang
-import Network.UDP.UDPClient
+import IdrisNet.PacketLang
+import IdrisNet.UDP.UDPClient
+import Effect.StdIO
 
 -- Data structure communicated between aux thread and master thread,
 -- signifying some update.
 data GameMessage = UpdateRemotePaddle Bool Bool Int Int -- Up pressed, down pressed, x, y
-                 -- My plan is currently to send a UDP packet every time the
-                 -- ball updates. Not hugely efficient: it would be far better
-                 -- to just encode movement vectors, but let's see how it goes
                  | UpdateRemoteBallPos PongBall
 
 
 
 ballUpdate : PacketLang
-ballUpdate = do
+ballUpdate = with PacketLang do
   x <- bits 32
   y <- bits 32
   xv_neg <- bool
@@ -25,14 +23,14 @@ ballUpdate = do
   bool -- Last hit left
 
 paddleUpdate : PacketLang
-paddleUpdate = do
+paddleUpdate = with PacketLang do
   bool
   bool
   bits 32 -- X
   bits 32 -- Y
 
 statusUpdate : PacketLang
-statusUpdate = do
+statusUpdate = with PacketLang do
   is_ball <- bool -- True if ball update, false if paddle
   p_if is_ball then ballUpdate else paddleUpdate
  
@@ -51,12 +49,13 @@ sendBallUpdate = do
     let p = pongRemotePort st
     case m_pckt (pongBall st) of
       Just pckt => do putStr $ show (pongBall st) 
-                      Network.UDP.UDPClient.udpWritePacket sa p statusUpdate pckt
+                      IdrisNet.UDP.UDPClient.udpWritePacket sa p statusUpdate pckt
                       return True
       Nothing => return False
   where m_pckt : PongBall -> (Maybe (mkTy statusUpdate))
-        m_pckt pb = do let ((x, y), xv, yv) = 
-                        (pongBallPos pb, pongBallXVel pb, pongBallYVel pb)
+        m_pckt pb = with Monad do 
+                       let ((x, y), xv, yv) = 
+                         (pongBallPos pb, pongBallXVel pb, pongBallYVel pb)
                        b_x <- mkBounded 32 x
                        b_y <- mkBounded 32 y
                        let neg_xv = xv < 0
@@ -74,11 +73,11 @@ sendPaddleUpdate = do
     let up_pressed = pongIsUpPressed st
     let down_pressed = pongIsDownPressed st
     case m_pckt up_pressed down_pressed !getLocalPaddlePos of
-      Just pckt => do Network.UDP.UDPClient.udpWritePacket sa p statusUpdate pckt
+      Just pckt => do IdrisNet.UDP.UDPClient.udpWritePacket sa p statusUpdate pckt
                       return True
       Nothing => return False
   where m_pckt : Bool -> Bool -> (Int, Int) -> (Maybe (mkTy statusUpdate))
-        m_pckt up_pressed down_pressed (x, y) = do 
+        m_pckt up_pressed down_pressed (x, y) = with Monad do 
           b_x <- mkBounded 32 x
           b_y <- mkBounded 32 y
           return (False ## up_pressed ## down_pressed ## b_x ## b_y)

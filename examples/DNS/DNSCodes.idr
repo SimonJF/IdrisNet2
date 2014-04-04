@@ -1,6 +1,6 @@
 module DNSCodes
-import Network.Socket
-import Network.PacketLang
+import IdrisNet.Socket
+import IdrisNet.PacketLang
 
 %access public
 
@@ -120,6 +120,8 @@ AAAA_VAL = 28
 IN_VAL : Int
 IN_VAL = 1
 
+SOA_VAL : Int
+SOA_VAL = 6
 -- Type descriptions taken from RFC1035
            -- s | DNSTypeMD -- A mail destination (obsolete, use MX)
            -- s | DNSTypeMF -- A mail forwarder (obsolete, use MX)
@@ -139,6 +141,7 @@ data DNSType = DNSTypeA -- A host address
              | DNSTypeMX -- Mail exchange
              | DNSTypeTXT -- Text record
              | DNSTypeAAAA -- IPv6 Host Address
+             | DNSTypeSOA
 
 
 instance Show DNSType where
@@ -149,6 +152,7 @@ instance Show DNSType where
   show DNSTypePTR = "MX"
   show DNSTypeTXT = "TXT"
   show DNSTypeAAAA = "AAAA"
+  show DNSTypeSOA = "SOA"
 
 
 -- Question types
@@ -164,6 +168,7 @@ data DNSQType = DNSQTypeAXFR -- Request for transfer of entire zone
               | DNSQTypeMX -- Mail exchange
               | DNSQTypeTXT -- Text record
               | DNSQTypeAAAA -- IPv6 Host Address
+              | DNSQTypeSOA
 
 
 instance Show DNSQType where
@@ -178,6 +183,7 @@ instance Show DNSQType where
   show DNSQTypePTR = "MX"
   show DNSQTypeTXT = "TXT"
   show DNSQTypeAAAA = "AAAA"
+  show DNSQTypeSOA = "SOA"
 
 -- stop parsing comments 
             -- s | DNSQTypeMD -- A mail destination (obsolete, use MX)
@@ -244,6 +250,7 @@ dnsTypeToCode' DNSTypePTR = (BInt 12 oh)
 dnsTypeToCode' DNSTypeMX = (BInt 15 oh)
 dnsTypeToCode' DNSTypeTXT = (BInt 16 oh)
 dnsTypeToCode' DNSTypeAAAA = (BInt 28 oh)
+dnsTypeToCode' DNSTypeSOA = (BInt 6 oh)
 
 dnsTypeToCode : DNSType -> Int
 dnsTypeToCode DNSTypeA = 1
@@ -254,12 +261,13 @@ dnsTypeToCode DNSTypePTR = 12
 dnsTypeToCode DNSTypeMX = 15
 dnsTypeToCode DNSTypeTXT = 16
 dnsTypeToCode DNSTypeAAAA = 28
-
+dnsTypeToCode DNSTypeSOA = 6
 
 dnsCodeToType' : (Bounded 16) -> Maybe DNSType
 dnsCodeToType' (BInt 1 oh) = Just DNSTypeA
 dnsCodeToType' (BInt 2 oh) = Just DNSTypeNS
 dnsCodeToType' (BInt 5 oh) = Just DNSTypeCNAME
+dnsCodeToType' (BInt 6 oh) = Just DNSTypeSOA
 dnsCodeToType' (BInt 10 oh) = Just DNSTypeNULL
 dnsCodeToType' (BInt 12 oh) = Just DNSTypePTR
 dnsCodeToType' (BInt 15 oh) = Just DNSTypeMX
@@ -318,6 +326,7 @@ dnsQTypeToCode DNSQTypeAXFR = (BInt 252 oh)
 dnsQTypeToCode DNSQTypeMAILB = (BInt 253 oh)
 dnsQTypeToCode DNSQTypeMAILA = (BInt 254 oh)
 dnsQTypeToCode DNSQTypeALL = (BInt 255 oh)
+dnsQTypeToCode DNSQTypeSOA = (BInt 6 oh)
 
 data DNSResponse = DNSResponseNoError
                  | DNSResponseFormatError
@@ -353,22 +362,44 @@ dnsResponseToCode DNSResponseNameError = BInt 3 oh
 dnsResponseToCode DNSResponseNotImplementedError = BInt 4 oh
 dnsResponseToCode DNSResponseRefusedError = BInt 5 oh
 
-
 DomainFragment : Type
 DomainFragment = String
 
-data DNSPayloadType = DNSIPv4 | DNSIPv6 | DNSDomain 
+record DNSSoA : Type where
+  MkSOA : (dnsSOAMName : List DomainFragment) ->
+          (dnsSOARName : List DomainFragment) -> 
+          (dnsSOASerial : Int) ->
+          (dnsSOARefresh : Int) ->
+          (dnsSOARetry : Int) ->
+          (dnsSOAExpire : Int) ->
+          (dnsSOAMinimum : Int) ->
+          DNSSoA
+
+instance Show DNSSoA where
+  show soa =
+    "DNS Start of Authority: \n" ++ 
+    "MName: " ++ (show $ dnsSOAMName soa) ++ "\n" ++
+    "RName: " ++ (show $ dnsSOARName soa) ++ "\n" ++
+    "Serial: " ++ (show $ dnsSOASerial soa) ++ "\n" ++
+    "Refresh: " ++ (show $ dnsSOARefresh soa) ++ "\n" ++
+    "Retry: " ++ (show $ dnsSOARetry soa) ++ "\n" ++
+    "Expire: " ++ (show $ dnsSOAExpire soa) ++ "\n" ++
+    "Minimum: " ++ (show $ dnsSOAMinimum soa) ++ "\n" 
+
+data DNSPayloadType = DNSIPv4 | DNSIPv6 | DNSDomain | DNSSOA
 
 data DNSPayload : DNSPayloadType -> Type where
   DNSIPv4Payload : SocketAddress -> DNSPayload DNSIPv4 
   DNSIPv6Payload : SocketAddress -> DNSPayload DNSIPv6
   DNSDomainPayload : List DomainFragment -> DNSPayload DNSDomain
+  DNSSOAPayload : DNSSoA -> DNSPayload DNSSOA
 
 data DNSPayloadRel : DNSType -> DNSClass -> DNSPayloadType -> Type where
   DNSPayloadRelIP : DNSPayloadRel DNSTypeA DNSClassIN DNSIPv4
   DNSPayloadRelIP6 : DNSPayloadRel DNSTypeAAAA DNSClassIN DNSIPv6
   DNSPayloadRelCNAME : DNSPayloadRel DNSTypeCNAME DNSClassIN DNSDomain
   DNSPayloadRelNS : DNSPayloadRel DNSTypeNS DNSClassIN DNSDomain
+  DNSPayloadRelSOA : DNSPayloadRel DNSTypeSOA DNSClassIN DNSSOA
 
 
 showPayload : (DNSPayloadRel rrt rrc pl_ty) -> DNSPayload pl_ty -> String
@@ -376,4 +407,4 @@ showPayload DNSPayloadRelIP (DNSIPv4Payload addr) = "IPv4: " ++ (show addr)
 showPayload DNSPayloadRelIP6 (DNSIPv6Payload addr) = "IPv6 " ++ (show addr)
 showPayload DNSPayloadRelCNAME (DNSDomainPayload dom) = "Domain: " ++ show dom
 showPayload DNSPayloadRelNS (DNSDomainPayload dom) = "Domain: " ++ show dom
-
+showPayload DNSPayloadRelSOA (DNSSOAPayload soa) = "SOA: " ++ show soa

@@ -1,8 +1,8 @@
 module Main
 import Effects
 import Effect.StdIO
-import Network.Socket
-import Network.UDP.UDPClient
+import IdrisNet.Socket
+import IdrisNet.UDP.UDPClient
 
 getAndSend : Nat -> SocketAddress -> Port ->
             { [UDPCLIENT, STDIO] } Eff IO ()

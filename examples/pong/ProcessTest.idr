@@ -1,7 +1,7 @@
 module Main
 
 import Effects
-import Process
+import Effect.Process
 import Effect.StdIO
 
 

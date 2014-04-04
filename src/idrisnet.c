@@ -44,12 +44,8 @@ int idrnet_getaddrinfo(struct addrinfo** address_res, char* host, int port,
     // then we want to instruct the C library to fill in the IP automatically
     if (strlen(host) == 0) {
         hints.ai_flags = AI_PASSIVE; // fill in IP automatically
-        printf("Lib: getaddringo -- strlen host 0len, so set AI_PASSIVE\n");
         return getaddrinfo(NULL, str_port, &hints, address_res);
-    } else {
-        printf("Lib: getaddrinfo -- strlen host not 0 len: %s\n", host);
-    }
-
+    } 
     return getaddrinfo(host, str_port, &hints, address_res);
 
 }
@@ -58,14 +54,14 @@ int idrnet_bind(int sockfd, int family, int socket_type, char* host, int port) {
     struct addrinfo* address_res;
     int addr_res = idrnet_getaddrinfo(&address_res, host, port, family, socket_type);
     if (addr_res == -1) {
-        printf("Lib err: bind getaddrinfo\n");
+        //printf("Lib err: bind getaddrinfo\n");
         return -1;
     }
 
     int bind_res = bind(sockfd, address_res->ai_addr, address_res->ai_addrlen);
     if (bind_res == -1) {
         //freeaddrinfo(address_res);
-        printf("Lib err: bind\n");
+        //printf("Lib err: bind\n");
         return -1;
     } 
     return 0;
@@ -124,7 +120,8 @@ int idrnet_send(int sockfd, char* data) {
 
 int idrnet_send_buf(int sockfd, void* data, int len) {
     void* buf_cpy = malloc(len);
-    memcpy(data, buf_cpy, len);
+    memset(buf_cpy, 0, len);
+    memcpy(buf_cpy, data, len);
     buf_htonl(buf_cpy, len);
     int res = send(sockfd, buf_cpy, len, 0);
     free(buf_cpy);
@@ -195,13 +192,12 @@ int idrnet_sendto_buf(int sockfd, void* buf, int buf_len, char* host, int port, 
     struct addrinfo* remote_host;
     int addr_res = idrnet_getaddrinfo(&remote_host, host, port, family, SOCK_DGRAM);
     if (addr_res == -1) {
-        printf("lib err: sendto getaddrinfo \n");
+        //printf("lib err: sendto getaddrinfo \n");
         return -1;
     } 
 
- //   printf("Arguments sockfd %d, buf ptr %p, buf len %d, host %s, port %d, family %d, remote_host %p, remote sockaddr reloaded %s, remote sockaddr len %d\n",
-   //         sockfd, buf, buf_len, host, port, family, remote_host, idrnet_sockaddr_ipv4(remote_host->ai_addr), remote_host->ai_addrlen);
     buf_htonl(buf, buf_len);
+
     int send_res = sendto(sockfd, buf, buf_len, 0, 
                         remote_host->ai_addr, remote_host->ai_addrlen);
     if (send_res == -1) {

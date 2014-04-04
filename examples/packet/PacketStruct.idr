@@ -1,5 +1,5 @@
 module PacketStruct
-import Network.PacketLang
+import IdrisNet.PacketLang
 
 %access public
 

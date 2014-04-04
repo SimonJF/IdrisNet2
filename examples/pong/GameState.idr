@@ -1,6 +1,6 @@
 module GameState
 
-import Network.Socket
+import IdrisNet.Socket
 
 import Effect.SDL
 import Effect.State

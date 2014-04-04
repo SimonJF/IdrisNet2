@@ -1,8 +1,8 @@
 module Main
 import Effects
 import Effect.StdIO
-import Network.Socket
-import Network.TCP.TCPServer
+import IdrisNet.Socket
+import IdrisNet.TCP.TCPServer
 
 
 receive' : { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
@@ -48,11 +48,11 @@ serverLoop = do
     | ConnectionClosed => return ()
   serverLoop
 
-setupServer : SocketAddress -> Port -> Bool ->
+setupServer : Port -> Bool ->
               { [TCPSERVER (), STDIO] } Eff IO ()
-setupServer sa port do_fork = do
+setupServer port do_fork = do
   putStr "Binding\n" 
-  OperationSuccess _ <- bind sa port
+  OperationSuccess _ <- bind Nothing port
     | RecoverableError _ => return ()
     | FatalError err => do putStr ("Error binding: " ++ (show err) ++ "\n") 
                            return ()
@@ -69,4 +69,4 @@ setupServer sa port do_fork = do
 
 
 main : IO ()
-main = run (setupServer (IPv4Addr 127 0 0 1) 1234 False) 
+main = run (setupServer 1234 False) 

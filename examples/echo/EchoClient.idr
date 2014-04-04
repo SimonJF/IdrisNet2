@@ -1,6 +1,6 @@
 module Main
 import Effects
-import Network.TCP.TCPClient
+import IdrisNet.TCP.TCPClient
 import Effect.StdIO
 
 clientLoop : ByteLength -> 
