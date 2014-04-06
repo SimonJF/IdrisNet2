@@ -48,8 +48,7 @@ sendBallUpdate = do
     let sa = pongRemoteAddr st
     let p = pongRemotePort st
     case m_pckt (pongBall st) of
-      Just pckt => do putStr $ show (pongBall st) 
-                      IdrisNet.UDP.UDPClient.udpWritePacket sa p statusUpdate pckt
+      Just pckt => do IdrisNet.UDP.UDPClient.udpWritePacket sa p statusUpdate pckt
                       return True
       Nothing => return False
   where m_pckt : PongBall -> (Maybe (mkTy statusUpdate))

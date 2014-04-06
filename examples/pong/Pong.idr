@@ -137,7 +137,6 @@ setupUDP : Port -> PongRunning ()
 setupUDP p = with Effects do
   pid <- getPID
   spawn GameMessage (networkHandlerThread p pid) [(), ()]
-  putStr "After spawn\n"
   eventLoop
 
 printUsage : IO ()

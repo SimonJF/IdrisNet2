@@ -214,11 +214,7 @@ hitPaddle pb pos = inBox pb pos PADDLE_WIDTH PADDLE_HEIGHT
 -- Takes paddle position, ball position, returns movement velocities.
 -- Funky angle logic from here: http://gamedev.stackexchange.com/questions/4253/how-do-you-calculate-where-a-ball-should-go-when-it-bounces-off-the-bar
 paddleBounceVelocities : (Int, Int) -> (Int, Int) -> (Int, Int)
-paddleBounceVelocities (p_x, p_y) (b_x, b_y) = unsafePerformIO ( do putStrLn $ "Rel intersect: " ++ (show rel_intersect)
-                                                                    putStrLn $ "NI: " ++ (show normalised_intersect) 
-                                                                    putStrLn $ "Bounce angle: " ++ (show bounce_angle)
-                                                                    putStrLn $ "X, Y: " ++ (show (x_vel, y_vel))
-                                                                    return (x_vel, y_vel))
+paddleBounceVelocities (p_x, p_y) (b_x, b_y) = (x_vel, y_vel)
   where rel_intersect : Float 
         rel_intersect = (cast p_y) + ((cast PADDLE_HEIGHT) / 2) - (cast b_y)
         normalised_intersect : Float
