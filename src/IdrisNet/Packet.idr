@@ -170,13 +170,16 @@ unmarshalLString' (ActivePacketRes pckt pos p_len) (S k) = do
 unmarshalLString : ActivePacket -> Nat -> IO String
 unmarshalLString ap n = map pack (unmarshalLString' ap n)
 
+
 unmarshalBits : ActivePacket -> (c : Chunk) -> IO (Maybe (chunkTy c, Length))
 unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + (natToInt width) - 1) <= p_len)
   | True = do
     res <- foreignGetBits pckt pos (pos + (natToInt width) - 1)
     --putStrLn $ "Read: " ++ show res
-    return $ Just $ (BInt res (believe_me oh), (natToInt width)) -- Have to trust it, as it's from C
+    return $ Just $ (BInt res (assert_total $ believe_me oh), (natToInt width)) -- Have to trust it, as it's from C
   | False = return Nothing
+unmarshalBits _ _ = return Nothing
+
 
 unmarshalBool : ActivePacket -> IO (Maybe (Bool, Length))
 unmarshalBool (ActivePacketRes pckt pos p_len) with (pos <= p_len)
@@ -293,7 +296,9 @@ marshal pl dat = do
   len <- marshal' (ActivePacketRes pckt 0 pckt_len) pl dat
   -- putStrLn "Marshalling: "
 --  dumpPacket pckt 1024
-  return (pckt, (len `div` 8) + 1)
+  let nat_len' = (intToNat len) `div` 8
+  let len' = natToInt nat_len'
+  return (pckt, len' + 1)
 
 -- | Given a packet language and a BufPtr, unmarshals the packet
 public 

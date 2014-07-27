@@ -109,7 +109,7 @@ void* idrnet_create_sockaddr() {
 
 int idrnet_accept(int sockfd, void* sockaddr) {
     struct sockaddr* addr = (struct sockaddr*) sockaddr;
-    int addr_size = 0;
+    socklen_t addr_size = 0;
     return accept(sockfd, addr, &addr_size);
 }
 
@@ -220,7 +220,7 @@ void* idrnet_recvfrom(int sockfd, int len) {
     char* buf = (char*) malloc(len + 1);
     idrnet_recvfrom_result* ret = 
         (idrnet_recvfrom_result*) malloc(sizeof(idrnet_recvfrom_result));
-    memset(remote_addr, 0, sizeof(remote_addr));
+    memset(remote_addr, 0, sizeof(struct sockaddr_storage));
     memset(buf, 0, len + 1);
     memset(ret, 0, sizeof(idrnet_recvfrom_result));
     socklen_t fromlen = sizeof(struct sockaddr_storage);
@@ -250,9 +250,9 @@ void* idrnet_recvfrom_buf(int sockfd, void* buf, int len) {
         (struct sockaddr_storage*) malloc(sizeof(struct sockaddr_storage));
     idrnet_recvfrom_result* ret = 
         (idrnet_recvfrom_result*) malloc(sizeof(idrnet_recvfrom_result));
-    memset(remote_addr, 0, sizeof(remote_addr));
+    memset(remote_addr, 0, sizeof(struct sockaddr_storage));
     memset(ret, 0, sizeof(idrnet_recvfrom_result));
-    int fromlen = 0;
+    socklen_t fromlen = 0;
 
     int recv_res = recvfrom(sockfd, buf, len, 0, (struct sockaddr*) remote_addr, &fromlen);
     // Check for failure... But don't free the buffer! Not our job.

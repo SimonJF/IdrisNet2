@@ -6,7 +6,7 @@ import IdrisNet.TCP.TCPServer
 
 
 receive' : { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
-             [STDIO, TCPSERVERCLIENT ()] } Eff IO ()
+             [STDIO, TCPSERVERCLIENT ()] } Eff ()
 receive' = do
   -- Receive
   OperationSuccess (str, len) <- tcpRecv 1024
@@ -24,10 +24,10 @@ receive' = do
   receive'
 
 receive : ClientProgram ()
-receive = new receive'
+receive = receive'
 
 forkServerLoop : { [TCPSERVER (ServerListening), STDIO] ==>
-               [TCPSERVER (), STDIO] } Eff IO ()
+               [TCPSERVER (), STDIO] } Eff ()
 forkServerLoop = do
   -- Accept, and perform the "receive" program with the new socket.
   OperationSuccess _ <- forkAccept receive
@@ -38,7 +38,7 @@ forkServerLoop = do
   forkServerLoop
 
 serverLoop : { [TCPSERVER (ServerListening), STDIO] ==>
-               [TCPSERVER (), STDIO] } Eff IO ()
+               [TCPSERVER (), STDIO] } Eff ()
 serverLoop = do
   -- Accept, and perform the "receive" program with the new socket.
   OperationSuccess _ <- accept receive
@@ -49,7 +49,7 @@ serverLoop = do
   serverLoop
 
 setupServer : Port -> Bool ->
-              { [TCPSERVER (), STDIO] } Eff IO ()
+              { [TCPSERVER (), STDIO] } Eff ()
 setupServer port do_fork = do
   putStr "Binding\n" 
   OperationSuccess _ <- bind Nothing port

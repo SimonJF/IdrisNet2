@@ -206,6 +206,7 @@ getSockAddr (SAPtr ptr) = do
       return $ parseIPv4 ipv4_addr
     Just AF_INET6 => return IPv6Addr
     Just AF_UNSPEC => return InvalidAddress
+    _ => return InvalidAddress
 
 accept : Socket -> IO (Either SocketError (Socket, SocketAddress))
 accept sock = do

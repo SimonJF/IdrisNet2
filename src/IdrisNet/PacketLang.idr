@@ -116,7 +116,6 @@ mutual
 
 
 {- Chunk length in bits -}
-total
 bitLength : (pl : PacketLang) -> mkTy pl -> Length
 chunkLength : (c : Chunk) -> chunkTy c -> Length
 chunkLength (Bit w p) _ = natToInt w

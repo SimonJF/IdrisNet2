@@ -6,7 +6,7 @@ import Effect.StdIO
 clientLoop : ByteLength -> 
                { [TCPCLIENT (ClientConnected), STDIO] ==> 
                  [TCPCLIENT (), STDIO]} 
-               Eff IO ()
+               Eff ()
 clientLoop len = do
   input <- getStr
   if (input == "bye!\n") then tcpClose 
@@ -30,7 +30,7 @@ clientLoop len = do
 echoClient : SocketAddress -> 
              Port -> 
              { [TCPCLIENT (), STDIO] ==> 
-               [TCPCLIENT (), STDIO]} Eff IO ()
+               [TCPCLIENT (), STDIO]} Eff ()
 echoClient sa port = do
   OperationSuccess _ <- tcpConnect sa port
     | RecoverableError _ => echoClient sa port

@@ -76,26 +76,26 @@ UDPSERVER t = MkEff t UDPServer
 udpBind : (Maybe SocketAddress) -> 
           Port -> 
           { [UDPSERVER ()] ==> [UDPSERVER (interpUDPBindRes result)] }
-          Eff IO (UDPRes ())
-udpBind sa p = (UDPSBind sa p)
+          Eff (UDPRes ())
+udpBind sa p = call (UDPSBind sa p)
 
 -- Closes a listening socket
-udpClose : { [UDPSERVER UDPBound] ==> [UDPSERVER ()] } Eff IO ()
-udpClose = UDPSClose
+udpClose : { [UDPSERVER UDPBound] ==> [UDPSERVER ()] } Eff ()
+udpClose = call UDPSClose
 
 -- Writes a string to the given remote host
 udpWriteString : SocketAddress -> 
                  Port ->
                  String -> 
                  { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
-                 Eff IO (UDPRes ByteLength)
-udpWriteString sa p s = (UDPSWriteString sa p s)
+                 Eff (UDPRes ByteLength)
+udpWriteString sa p s = call (UDPSWriteString sa p s)
 
 -- Receives a string
 udpReadString : ByteLength -> 
                 { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]} 
-                Eff IO (UDPRes (UDPAddrInfo, String, ByteLength))
-udpReadString len = (UDPSReadString len)
+                Eff (UDPRes (UDPAddrInfo, String, ByteLength))
+udpReadString len = call (UDPSReadString len)
 
 -- Writes a PacketLang packet
 udpWritePacket : SocketAddress -> 
@@ -103,25 +103,25 @@ udpWritePacket : SocketAddress ->
                  (pl : PacketLang) ->
                  (mkTy pl) ->
                  { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
-                 Eff IO (UDPRes ByteLength)
-udpWritePacket sa p pl pckt = (UDPSWritePacket sa p pl pckt)
+                 Eff (UDPRes ByteLength)
+udpWritePacket sa p pl pckt = call (UDPSWritePacket sa p pl pckt)
 
 -- Reads a PacketLang packet
 udpReadPacket : (pl : PacketLang) ->
                 Length ->
                 { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
-                Eff IO (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength))) 
-udpReadPacket pl len = (UDPSReadPacket pl len)
+                Eff (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength))) 
+udpReadPacket pl len = call (UDPSReadPacket pl len)
 
 -- Reads a PacketLang packet but retains the buffer
 udpReadPacket' : (pl : PacketLang) ->
                 Length ->
                 { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
-                Eff IO (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength, BufPtr))) 
-udpReadPacket' pl len = (UDPSReadPacketBuf pl len)
+                Eff (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength, BufPtr))) 
+udpReadPacket' pl len = call (UDPSReadPacketBuf pl len)
 
-udpFinalise : { [UDPSERVER UDPError] ==> [UDPSERVER ()]} Eff IO ()
-udpFinalise = UDPSFinalise
+udpFinalise : { [UDPSERVER UDPError] ==> [UDPSERVER ()]} Eff ()
+udpFinalise = call UDPSFinalise
 
 instance Handler UDPServer IO where
   handle () (UDPSBind sa p) k = do

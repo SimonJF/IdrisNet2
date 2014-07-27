@@ -84,16 +84,16 @@ instance Handler DNSParser IO where
   handle st (UpdateDNSState st') k = k () st'
 
 private
-getDNSState : { [DNSPARSER DNSState] } Eff m DNSState
-getDNSState = GetDNSState
+getDNSState : { [DNSPARSER DNSState] } Eff DNSState
+getDNSState = call GetDNSState
 
 private
-updateDNSState : DNSState -> { [DNSPARSER DNSState] } Eff m ()
-updateDNSState st = UpdateDNSState st
+updateDNSState : DNSState -> { [DNSPARSER DNSState] } Eff ()
+updateDNSState st = call $ UpdateDNSState st
 
 private
 unmarshalReference : DNSReference -> 
-                     { [DNSPARSER DNSState] } Eff m (Maybe (List DomainFragment))
+                     { [DNSPARSER DNSState] } Eff (Maybe (List DomainFragment))
 unmarshalReference ref = UnmarshalReference ref
 
 parseDNSHeader : (mkTy dnsHeader) -> DNSHeader
@@ -103,7 +103,7 @@ parseDNSHeader (ident ## qr ## opcode ## aa ## tc ## rd ##
   
 
 decodeReference : DNSReference -> { [DNSPARSER DNSState] } 
-                  Eff m (Either DNSParseError (List DomainFragment))
+                  Eff (Either DNSParseError (List DomainFragment))
 decodeReference ref = do
   st <- getDNSState 
   case lookup ref (labelCache st) of
@@ -115,7 +115,7 @@ decodeReference ref = do
 
 decodeLabels : (mkTy dnsLabels) -> 
                { [DNSPARSER DNSState] } 
-                 Eff m (Either DNSParseError (List DomainFragment))
+                 Eff (Either DNSParseError (List DomainFragment))
 decodeLabels (lbls ## (Left null_term)) = return $ Right (map unmarshalLabel lbls)
 decodeLabels (lbls ## (Right (_ ## ref))) = do
   let decoded_lbls = map unmarshalLabel lbls
@@ -126,11 +126,11 @@ decodeLabels (lbls ## (Right (_ ## ref))) = do
 
 decodeDomain : (mkTy dnsDomain) -> 
                { [DNSPARSER DNSState] } 
-                 Eff m (Either DNSParseError (List DomainFragment))
+                 Eff (Either DNSParseError (List DomainFragment))
 decodeDomain (Left (_ ## ref)) = decodeReference (val ref)
 decodeDomain (Right encoded_lbls) = decodeLabels encoded_lbls
 
-parseDNSQuestion : (mkTy dnsQuestion) -> { [DNSPARSER DNSState] } Eff m (Either DNSParseError DNSQuestion)
+parseDNSQuestion : (mkTy dnsQuestion) -> { [DNSPARSER DNSState] } Eff (Either DNSParseError DNSQuestion)
 parseDNSQuestion (encoded_domain ## qt ## qc) = do
   decoded_domain <- decodeDomain encoded_domain
   case decoded_domain of
@@ -268,15 +268,15 @@ parseDNSPacket (hdr ## qdcount ## ancount ## nscount ##
 --encodeDNSPacket : DNSPacket -> { [DNSPARSER DNSState] } Eff m (mkTy dns)
 --encodeDNSPacket dnspckt = ?encodeDNSPacket_rhs
 
-initialise : BufPtr -> Length -> { [DNSPARSER ()] ==> [DNSPARSER DNSState] } Eff IO ()
-initialise ptr len = Initialise ptr len
+initialise : BufPtr -> Length -> { [DNSPARSER ()] ==> [DNSPARSER DNSState] } Eff ()
+initialise ptr len = call $ Initialise ptr len
 
-finalise : { [DNSPARSER DNSState] ==> [DNSPARSER ()] } Eff IO ()
-finalise = Finalise
+finalise : { [DNSPARSER DNSState] ==> [DNSPARSER ()] } Eff ()
+finalise = call $ Finalise
 
 public
 parseDNS : BufPtr -> Length -> (mkTy dns) -> 
-           { [DNSPARSER ()] } Eff IO (Either DNSParseError DNSPacket)
+           { [DNSPARSER ()] } Eff (Either DNSParseError DNSPacket)
 parseDNS ptr len pckt = with Eff do
   initialise ptr len
   res <- parseDNSPacket pckt

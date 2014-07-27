@@ -58,46 +58,46 @@ TCPCLIENT t = MkEff t TCPClient
 -- Attempts to connect to a remote host and port. If it fails, remains in
 -- the uninitialised state. If it succeeds, transitions to ClientConnected.
 tcpConnect : SocketAddress -> Port -> { [TCPCLIENT ()] ==> [TCPCLIENT (interpConnectRes result)] }
-                                      Eff IO (SocketOperationRes Socket) 
-tcpConnect sa port = (Connect sa port)
+                                      Eff (SocketOperationRes Socket) 
+tcpConnect sa port = call (Connect sa port)
 
 -- Closes a connected socket.
-tcpClose : { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT ()] } Eff IO ()
-tcpClose = Close
+tcpClose : { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT ()] } Eff ()
+tcpClose = call Close
 
 -- Finalises a socket that has errored
-tcpFinalise : { [TCPCLIENT (ErrorState)] ==> [TCPCLIENT ()] } Eff IO () 
-tcpFinalise = Finalise
+tcpFinalise : { [TCPCLIENT (ErrorState)] ==> [TCPCLIENT ()] } Eff () 
+tcpFinalise = call Finalise
 
 {- vv These may all fail, so must be checked for failures after the operations -}
 
 -- Sends a string
 tcpSend : String -> { [TCPCLIENT (ClientConnected)] ==> 
                       [TCPCLIENT (interpOperationRes result)] }
-                     Eff IO (SocketOperationRes ByteLength)
-tcpSend dat = (WriteString dat)
+                     Eff (SocketOperationRes ByteLength)
+tcpSend dat = call (WriteString dat)
 
 -- Receives a string
 tcpRecv : ByteLength -> 
           { [TCPCLIENT (ClientConnected)] ==> 
             [TCPCLIENT (interpOperationRes result)] } 
-          Eff IO (SocketOperationRes (String, ByteLength))
-tcpRecv bl = (ReadString bl)
+          Eff (SocketOperationRes (String, ByteLength))
+tcpRecv bl = call (ReadString bl)
 
 -- Sends a PacketLang packet
 tcpWritePacket : (pl : PacketLang) ->
                  (mkTy pl) ->
                  { [TCPCLIENT ClientConnected] ==> 
                    [TCPCLIENT (interpOperationRes result)] }
-                 Eff IO (SocketOperationRes ByteLength)
-tcpWritePacket pl dat = (WritePacket pl dat)
+                 Eff (SocketOperationRes ByteLength)
+tcpWritePacket pl dat = call (WritePacket pl dat)
 
 -- Receives a PacketLang packet
 tcpReadPacket : (pl : PacketLang) ->
                 Length -> -- TODO: Ideally we won't need this parameter
                 { [TCPCLIENT ClientConnected] ==> [TCPCLIENT (interpOperationRes result)] }
-                Eff IO (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
-tcpReadPacket pl len = (ReadPacket pl len)
+                Eff (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
+tcpReadPacket pl len = call (ReadPacket pl len)
 
 instance Handler TCPClient IO where
   handle () (Connect sa port) k = do

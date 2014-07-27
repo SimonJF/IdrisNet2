@@ -77,43 +77,43 @@ TCPSERVERCLIENT t = MkEff t TCPServerClient
 -- Send a string to the accepted client
 tcpSend : String -> { [TCPSERVERCLIENT (ClientConnected)] ==> 
                       [TCPSERVERCLIENT (interpClientOperationRes result)] }
-                    Eff IO (SocketOperationRes ByteLength)
-tcpSend s = (WriteString s)
+                    Eff (SocketOperationRes ByteLength)
+tcpSend s = call (WriteString s)
 
 -- Receive a string from the accepted client
 tcpRecv : ByteLength -> { [TCPSERVERCLIENT (ClientConnected)] ==> 
                           [TCPSERVERCLIENT (interpClientOperationRes result)] }
-                        Eff IO (SocketOperationRes (String, ByteLength))
-tcpRecv bl = (ReadString bl)
+                        Eff (SocketOperationRes (String, ByteLength))
+tcpRecv bl = call (ReadString bl)
 
 -- Close the connectoin
-tcpClose : { [TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
-tcpClose = CloseClient
+tcpClose : { [TCPSERVERCLIENT (ClientConnected)] ==> [TCPSERVERCLIENT ()] } Eff ()
+tcpClose = call CloseClient
 
 -- Finalise an erroneous connection
-tcpFinalise : { [TCPSERVERCLIENT (ClientError)] ==> [TCPSERVERCLIENT ()] } Eff IO ()
-tcpFinalise = FinaliseClient
+tcpFinalise : { [TCPSERVERCLIENT (ClientError)] ==> [TCPSERVERCLIENT ()] } Eff ()
+tcpFinalise = call FinaliseClient
 
 -- Write a PacketLang packet
 tcpWritePacket : (pl : PacketLang) ->
                  (mkTy pl) ->
                  { [TCPSERVERCLIENT ClientConnected] ==> 
                    [TCPSERVERCLIENT (interpClientOperationRes result)] }
-                 Eff IO (SocketOperationRes ByteLength)
-tcpWritePacket pl dat = (WritePacket pl dat)
+                 Eff (SocketOperationRes ByteLength)
+tcpWritePacket pl dat = call (WritePacket pl dat)
 
 -- Read a PacketLang packet
 tcpReadPacket : (pl : PacketLang) ->
                 Length -> -- TODO: Ideally we won't need this parameter
                 { [TCPSERVERCLIENT ClientConnected] ==> 
                   [TCPSERVERCLIENT (interpClientOperationRes result)] }
-                Eff IO (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
-tcpReadPacket pl len = (ReadPacket pl len)
+                Eff (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
+tcpReadPacket pl len = call (ReadPacket pl len)
 
 -- The type of client programs. Starts in ClientConnected, but must end unconnected.
 ClientProgram : Type -> Type
 ClientProgram t = {[TCPSERVERCLIENT (ClientConnected)] ==> 
-                   [TCPSERVERCLIENT ()]} Eff IO t
+                   [TCPSERVERCLIENT ()]} Eff t
 
 instance Handler TCPServerClient IO where
   handle (CC sock addr) (WriteString str) k = do
@@ -205,37 +205,37 @@ TCPSERVER t = MkEff t TCPServer
 bind : (Maybe SocketAddress) -> 
        Port -> { [TCPSERVER ()] ==> 
                  [TCPSERVER (interpTCPServerBindRes result)] } 
-                Eff IO (SocketOperationRes ())
-bind sa p = (TCPServerBind sa p)
+                Eff (SocketOperationRes ())
+bind sa p = call (TCPServerBind sa p)
 
 -- Listens on a bound socket
 listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] } 
-         Eff IO (SocketOperationRes ())
-listen = Listen
+         Eff (SocketOperationRes ())
+listen = call Listen
 
 -- Accepts a new client, and runs the given client program
 accept : (ClientProgram t) -> 
          { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)] }
-         Eff IO (SocketOperationRes t)
-accept prog = (Accept prog)
+         Eff (SocketOperationRes t)
+accept prog = call (Accept prog)
 
 -- Accepts in a different thread
 forkAccept : (ClientProgram ()) -> 
          { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)] }
-         Eff IO (SocketOperationRes ())
-forkAccept prog = (ForkAccept prog)
+         Eff (SocketOperationRes ())
+forkAccept prog = call (ForkAccept prog)
 
 -- Close a bound server socket
-closeBound : { [TCPSERVER (ServerBound)] ==> [TCPSERVER ()] } Eff IO ()
-closeBound = CloseBound
+closeBound : { [TCPSERVER (ServerBound)] ==> [TCPSERVER ()] } Eff ()
+closeBound = call CloseBound
 
 -- Close a listening server socket
-closeListening : { [TCPSERVER (ServerListening)] ==> [TCPSERVER ()] } Eff IO ()
-closeListening = CloseListening
+closeListening : { [TCPSERVER (ServerListening)] ==> [TCPSERVER ()] } Eff ()
+closeListening = call CloseListening
 
 -- Finalise a server socket that has errored
-finaliseServer : { [TCPSERVER (ServerError)] ==> [TCPSERVER ()] } Eff IO ()
-finaliseServer = Finalise
+finaliseServer : { [TCPSERVER (ServerError)] ==> [TCPSERVER ()] } Eff ()
+finaliseServer = call Finalise
 
 {- Handler Functions -}
 instance Handler TCPServer IO where 

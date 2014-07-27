@@ -97,9 +97,7 @@ void setPacketBits(PACKET p, int start, int end, int data) {
 }
 
 void setPacketString(PACKET p, int start, char* s, int l, char t) {
-    int i;
     while(*s!=t && (l!=0)) {
- //       printf("LIB: Setting char %c\n", *s);
         setPacketBits(p, start, start+7, (int)(*s));
         start+=8;
         ++s;

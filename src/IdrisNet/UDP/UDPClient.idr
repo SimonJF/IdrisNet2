@@ -38,15 +38,15 @@ UDPCLIENT = MkEff () UDPClient
 -- Writes a string to the given remote host
 udpWriteString : SocketAddress -> Port -> String -> 
                  { [UDPCLIENT] }
-                 Eff IO (UDPRes ByteLength)
-udpWriteString sa p s = (UDPWriteString sa p s)
+                 Eff (UDPRes ByteLength)
+udpWriteString sa p s = call (UDPWriteString sa p s)
 
 
 -- Reads a string, returning the address, data, and length
 udpReadString : ByteLength -> 
                 { [UDPCLIENT] } 
-                Eff IO (UDPRes (UDPAddrInfo, String, ByteLength))
-udpReadString len = (UDPReadString len)
+                Eff (UDPRes (UDPAddrInfo, String, ByteLength))
+udpReadString len = call (UDPReadString len)
 
 -- Writes a packet to the given remote host
 udpWritePacket : SocketAddress ->
@@ -54,15 +54,15 @@ udpWritePacket : SocketAddress ->
                  (pl : PacketLang) ->
                  (mkTy pl) ->
                  { [UDPCLIENT] }
-                 Eff IO (UDPRes ByteLength)
-udpWritePacket sa p pl pckt = (UDPWritePacket sa p pl pckt)
+                 Eff (UDPRes ByteLength)
+udpWritePacket sa p pl pckt = call (UDPWritePacket sa p pl pckt)
 
 -- Reads a packet from the givem remote host
 udpReadPacket : (pl : PacketLang) ->
                 Length ->
                 { [UDPCLIENT] }
-                Eff IO (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength))) 
-udpReadPacket pl len = (UDPReadPacket pl len)
+                Eff (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength))) 
+udpReadPacket pl len = call (UDPReadPacket pl len)
 
 -- Saves us repeating ourselves in the handler...
 withSocket : (a : Type) ->

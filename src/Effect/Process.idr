@@ -18,25 +18,23 @@ mutual
   {- Type of a running process, including message type, execution context,
      input and output effects. -}
   RunningProcessM : (mTy : Type) -> 
-                   (m : Type -> Type) -> 
                    List EFFECT -> 
                    List EFFECT -> 
                    Type
-  RunningProcessM mty m effs effs' = 
-    Eff m () ((PROCESS (Running mty)) :: effs) 
+  RunningProcessM mty effs effs' = 
+    Eff () ((PROCESS (Running mty)) :: effs) 
              (\_ => (PROCESS (Running mty)) :: effs')
 
   {- RunningProcessM but with the same input and output effects -}
   RunningProcess : (mTy : Type) ->
-                   (m : Type -> Type) ->
                    List EFFECT ->
                    Type
-  RunningProcess mty m effs = RunningProcessM mty m effs effs
+  RunningProcess mty effs = RunningProcessM mty effs effs
 
 
   data Process : Effect where
     Spawn : (mty : Type) ->
-            RunningProcessM mty IO effs effs' -> 
+            RunningProcessM mty effs effs' -> 
             Env IO effs -> 
             { (Running mty') } Process (ProcPID mty)
 
@@ -60,30 +58,30 @@ mutual
 
 -- Spawns a new thread using the given message type, thread, and environment
 spawn : (mty : Type) -> 
-        RunningProcessM mty IO effs effs' -> 
+        RunningProcessM mty effs effs' -> 
         Env IO effs ->
-        { [PROCESS (Running mty')] } Eff IO (ProcPID mty)
-spawn ty proc env = Spawn ty proc env
+        { [PROCESS (Running mty')] } Eff (ProcPID mty)
+spawn ty proc env = call $ Spawn ty proc env
 
 -- Checks whether a message has been received
-hasMessage : { [PROCESS (Running mty)] } Eff IO Bool
-hasMessage = HasMessageWaiting
+hasMessage : { [PROCESS (Running mty)] } Eff Bool
+hasMessage = call HasMessageWaiting
 
 -- Sends a message
-sendMessage : ProcPID mty -> mty -> { [PROCESS (Running mty)] } Eff IO ()
-sendMessage pid msg = SendMessage pid msg
+sendMessage : ProcPID mty -> mty -> { [PROCESS (Running mty)] } Eff ()
+sendMessage pid msg = call $ SendMessage pid msg
 
 -- Receives a message
-recvMessage : { [PROCESS (Running mty)] } Eff IO mty
-recvMessage = RecvMessage
+recvMessage : { [PROCESS (Running mty)] } Eff mty
+recvMessage = call RecvMessage
 
 -- Receives a message, returning the PID of the sending process
-recvMessageAddr : { [PROCESS (Running mty)] } Eff IO (ProcPID mty, mty)
-recvMessageAddr = RecvMessageAddr
+recvMessageAddr : { [PROCESS (Running mty)] } Eff (ProcPID mty, mty)
+recvMessageAddr = call RecvMessageAddr
 
 -- Returns the local PID
-getPID : { [PROCESS (Running mty)] } Eff IO (ProcPID mty) 
-getPID = GetID
+getPID : { [PROCESS (Running mty)] } Eff (ProcPID mty) 
+getPID = call GetID
 
 -- Type synonym for constructing instances
 initProcess : Running mty
