@@ -42,7 +42,7 @@ mkMessage (True ## x ## y ## xv_neg ## xv ## yv_neg ## yv ## stuck ## left) =
 
 mkMessage (False ## up ## down ## x ## y) = UpdateRemotePaddle up down (val x) (val y) 
 
-sendBallUpdate : { [STATE GameState, STDIO, UDPCLIENT] } Eff IO Bool
+sendBallUpdate : { [STATE GameState, STDIO, UDPCLIENT] } Eff Bool
 sendBallUpdate = do
     st <- get
     let sa = pongRemoteAddr st
@@ -64,7 +64,7 @@ sendBallUpdate = do
                        return (True ## b_x ## b_y ## neg_xv ## b_xv ## 
                                neg_yv ## b_yv ## (pongBallStuck pb) ## (pongBallHitLeft pb))
 
-sendPaddleUpdate : { [STATE GameState, UDPCLIENT] } Eff IO Bool
+sendPaddleUpdate : { [STATE GameState, UDPCLIENT] } Eff Bool
 sendPaddleUpdate = do
     st <- get
     let sa = pongRemoteAddr st

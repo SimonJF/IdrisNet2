@@ -99,7 +99,7 @@ initBall lp_x lp_y = MkPongBall (ball_x, ball_y) 0 0 True True
         ball_y = lp_y + (PADDLE_HEIGHT `div` 2) 
 
 
-getLocalPaddlePos : { [STATE GameState] } Eff IO (Int, Int)
+getLocalPaddlePos : { [STATE GameState] } Eff (Int, Int)
 getLocalPaddlePos = do
   st <- get
   if isServer st then 
@@ -108,7 +108,7 @@ getLocalPaddlePos = do
     return $ pongRightPaddlePos st
 
 
-updateRemotePaddlePos : { [STATE GameState] } Eff IO ()
+updateRemotePaddlePos : { [STATE GameState] } Eff ()
 updateRemotePaddlePos = do
   st <- get
   let lpp = pongLeftPaddlePos st
@@ -124,7 +124,7 @@ updateRemotePaddlePos = do
     let new_pos = newPaddlePos lpp up down w h
     put $ record { pongLeftPaddlePos = new_pos } st
 
-updateLocalPaddlePos : { [STATE GameState] } Eff IO Bool
+updateLocalPaddlePos : { [STATE GameState] } Eff Bool
 updateLocalPaddlePos = do
   st <- get
   let lpp = pongLeftPaddlePos st
@@ -146,15 +146,15 @@ updateLocalPaddlePos = do
     return paddle_changed
 
   
-drawPaddles : { [SDL_ON, STATE GameState] } Eff IO ()
+drawPaddles : { [SDL_ON, STATE GameState] } Eff ()
 drawPaddles = do st <- get
                  drawPaddle (pongLeftPaddlePos st)
                  drawPaddle (pongRightPaddlePos st)
-  where drawPaddle : (Int, Int) -> { [SDL_ON] } Eff IO ()
+  where drawPaddle : (Int, Int) -> { [SDL_ON] } Eff ()
         drawPaddle (x, y) = rectangle black x y PADDLE_WIDTH PADDLE_HEIGHT
 
 
-drawBall : { [SDL_ON, STATE GameState] } Eff IO ()
+drawBall : { [SDL_ON, STATE GameState] } Eff ()
 drawBall = do
   st <- get
   let (MkPongBall (x, y) _ _ _ _) = pongBall st
@@ -176,13 +176,13 @@ initState w h = let (lp_x, lp_y) = initLPaddlePos w h in
 --            fine: we can probably just send the deltas again.
 
 
-launchBall : { [STATE GameState] } Eff IO ()
+launchBall : { [STATE GameState] } Eff ()
 launchBall = do
   st <- get
   let ball' = record { pongBallXVel = LAUNCH_VELOCITY, pongBallStuck = False } (pongBall st)
   put $ record { pongBall = ball' } st
 
-requiresLaunching : { [STATE GameState] } Eff IO Bool
+requiresLaunching : { [STATE GameState] } Eff Bool
 requiresLaunching = do
   st <- get
   let ball = pongBall st
@@ -190,7 +190,7 @@ requiresLaunching = do
   put $ record { pongToLaunch = False } st
   return (pongToLaunch st && (pongBallStuck ball))
 
-updateBallPos : { [STATE GameState] } Eff IO ()
+updateBallPos : { [STATE GameState] } Eff ()
 updateBallPos = do
   st <- get
   let ball = pongBall st
@@ -227,7 +227,7 @@ paddleBounceVelocities (p_x, p_y) (b_x, b_y) = (x_vel, y_vel)
         y_vel = (-(cast $ (sin bounce_angle) * (cast LAUNCH_VELOCITY)))
 
 -- Only check the opposite paddle to the one that was last hit.
-checkPaddleCollisions : { [STATE GameState] } Eff IO Bool
+checkPaddleCollisions : { [STATE GameState] } Eff Bool
 checkPaddleCollisions = do 
   st <- get
   let ball = pongBall st
@@ -253,7 +253,7 @@ checkPaddleCollisions = do
     return False
 
 -- Check the left and right walls
-checkLRBounds : { [STATE GameState] } Eff IO Bool
+checkLRBounds : { [STATE GameState] } Eff Bool
 checkLRBounds = do
   st <- get
   let (lp_x, lp_y) = pongLeftPaddlePos st
@@ -265,7 +265,7 @@ checkLRBounds = do
     return False
 
 -- Check top and bottom walls
-checkTBBounds : { [STATE GameState] } Eff IO Bool
+checkTBBounds : { [STATE GameState] } Eff Bool
 checkTBBounds = do
   st <- get
   let ball = pongBall st
@@ -289,7 +289,7 @@ checkTBBounds = do
 -- If not, we do collision checking: checking that the ball has hit the t&b walls --> reverse Y velocity
 --                                   checking that the ball has hit the paddles --> crazy paddle stuff
 --                                   checking that the ball has hit the R&L walls --> reset
-updateBallServer : { [STATE GameState] } Eff IO Bool
+updateBallServer : { [STATE GameState] } Eff Bool
 updateBallServer = do
   requires_launching <- requiresLaunching
   when requires_launching launchBall

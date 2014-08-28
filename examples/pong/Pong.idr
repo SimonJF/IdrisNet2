@@ -35,14 +35,14 @@ Pong s t = { [ SDL s
                , STATE GameState
                , STDIO
                , UDPCLIENT
-               , PROCESS (Running GameMessage)] } Eff IO t
+               , PROCESS (Running GameMessage)] } Eff t
 
 PongRunning : Type -> Type
 PongRunning t = Pong SDLSurface t
 
 -- TODO: Disambiguation more nicely
 networkHandlerThread' : (mthread : ProcPID GameMessage) -> 
-                        RunningProcessM GameMessage IO 
+                        RunningProcessM GameMessage
                          [UDPSERVER UDPBound, STDIO] 
                          [UDPSERVER (), STDIO] 
 networkHandlerThread' pid = with Effects do
@@ -56,11 +56,11 @@ networkHandlerThread' pid = with Effects do
   let msg = mkMessage pckt
   sendMessage pid msg
   networkHandlerThread' pid 
- -- spawn : Eff IO 
+ -- spawn : Eff 
 
 networkHandlerThread : Port -> 
                        (mthread : ProcPID GameMessage) -> 
-                       RunningProcess GameMessage IO [UDPSERVER (), STDIO]
+                       RunningProcess GameMessage [UDPSERVER (), STDIO]
 networkHandlerThread p pid = with Effects do
   putStr $ "Binding to port " ++ (show p) ++ "\n"
   UDPSuccess _ <- udpBind Nothing p
@@ -70,7 +70,7 @@ networkHandlerThread p pid = with Effects do
   networkHandlerThread' pid
 
 handleNetworkEvents : { [STATE GameState, 
-                         PROCESS (Running GameMessage)] } Eff IO ()
+                         PROCESS (Running GameMessage)] } Eff ()
 handleNetworkEvents = when !hasMessage (do
   st <- get
   case !recvMessage of
@@ -85,7 +85,7 @@ handleNetworkEvents = when !hasMessage (do
                        pongLeftPaddlePos = (x, y) } st )
     (UpdateRemoteBallPos ball) => put ( record { pongBall = ball } st ))
 
-handleKeyEvents : Maybe Event -> { [STATE GameState] } Eff IO Bool
+handleKeyEvents : Maybe Event -> { [STATE GameState] } Eff Bool
 handleKeyEvents (Just AppQuit) = return False
 handleKeyEvents (Just (KeyUp KeyUpArrow)) = do 
   put (record { pongIsUpPressed = False, pongIsPaddleChanged = True } !get)
