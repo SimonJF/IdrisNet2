@@ -3,7 +3,7 @@ module IdrisNet.UDP.UDPClient
 import Effects
 import IdrisNet.Packet
 import IdrisNet.PacketLang
-import IdrisNet.Socket
+import Network.Socket
 import IdrisNet.UDP.UDPCommon
 
 %access public

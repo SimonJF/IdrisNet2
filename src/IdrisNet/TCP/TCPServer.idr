@@ -2,7 +2,7 @@ module IdrisNet.TCP.TCPServer
 import Effects
 import IdrisNet.Packet
 import IdrisNet.PacketLang
-import IdrisNet.Socket
+import Network.Socket
 import IdrisNet.TCP.TCPCommon
 
 %access public
