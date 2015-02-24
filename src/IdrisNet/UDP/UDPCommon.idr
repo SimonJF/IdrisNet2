@@ -1,5 +1,5 @@
 module IdrisNet.UDP.UDPCommon
-import IdrisNet.Socket
+import Network.Socket
 
 data UDPRes : (res : Type) -> Type where
   UDPSuccess : res -> UDPRes res

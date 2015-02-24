@@ -1,5 +1,7 @@
 module IdrisNet2.PacketLang 
 import Language.Reflection
+import Data.So
+import Data.Vect
 
 %access public
 
@@ -27,7 +29,7 @@ strLen : String -> Int
 strLen s = natToInt $ length s
 
 data Bounded : Nat -> Type where
-  BInt : (x : Int) -> (prf : so (x < (pow 2 i))) -> Bounded i
+  BInt : (x : Int) -> (prf : So (x < (pow 2 i))) -> Bounded i
 
 instance Show (Bounded i) where
   show (BInt x _) = show x
@@ -44,7 +46,7 @@ mkBounded b i_n =
 -- Primitive Binary Chunks
 data Chunk : Type where
   -- Bits must be at least 1 wide
-  Bit : (width : Nat) -> so (width > 0) -> Chunk
+  Bit : (width : Nat) -> So (width > 0) -> Chunk
   -- Boolean value, stored as one bit.
   -- Convenience, so we can marshal / unmarshal directly as a Bool
   CBool : Chunk
@@ -78,7 +80,7 @@ mutual
   propTy : Proposition -> Type
   propTy (P_LT x y) = LT x y
   propTy (P_EQ x y) = x=y
-  propTy (P_BOOL b) = so b
+  propTy (P_BOOL b) = So b
   propTy (P_AND s t) = Both s t
   propTy (P_OR s t) = Either (propTy s) (propTy t)
 
@@ -145,7 +147,7 @@ bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 -- Syntax rules, so it's nicer to write these things...
 bit : (w : Nat) -> {default tactics { refine oh; solve; } 
-                     p : so (w > 0) } 
+                     p : So (w > 0) } 
                 -> Chunk
 bit w {p} = Bit w p
 

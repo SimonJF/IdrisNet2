@@ -2,8 +2,7 @@ package network
 
 sourcedir = src
 modules = IdrisNet.Packet, 
-          IdrisNet.PacketLang, 
-          IdrisNet.Socket, 
+          IdrisNet.PacketLang,
           IdrisNet.TCP.TCPClient, 
           IdrisNet.TCP.TCPCommon, 
           IdrisNet.TCP.TCPServer,

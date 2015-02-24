@@ -1,24 +1,25 @@
 module Main
 import Effects
 import Effect.StdIO
-import IdrisNet.Socket
+import Network.Socket
 import IdrisNet.TCP.TCPServer
+import IdrisNet.TCP.TCPCommon
 
 
-receive' : { [STDIO, TCPSERVERCLIENT ClientConnected] ==>
-             [STDIO, TCPSERVERCLIENT ()] } Eff ()
+receive' : { [TCPSERVERCLIENT ClientConnected] ==>
+             [TCPSERVERCLIENT ()] } Eff ()
 receive' = do
   -- Receive
   OperationSuccess (str, len) <- tcpRecv 1024
     | RecoverableError _ => receive'
-    | FatalError err => do putStr ("Error receiving: " ++ (show err)) 
+    | FatalError err => do -- putStr ("Error receiving: " ++ (show err))
                            tcpFinalise
     | ConnectionClosed => return ()
   -- Echo
   OperationSuccess _ <- tcpSend str
-    | RecoverableError err => do putStr ("Error sending: " ++ (show err)) 
+    | RecoverableError err => do -- putStr ("Error sending: " ++ (show err))
                                  tcpClose 
-    | FatalError err => do putStr ("Error sending: " ++ (show err)) 
+    | FatalError err => do -- putStr ("Error sending: " ++ (show err))
                            tcpFinalise
     | ConnectionClosed => return ()
   receive'
@@ -26,30 +27,30 @@ receive' = do
 receive : ClientProgram ()
 receive = receive'
 
-forkServerLoop : { [TCPSERVER (ServerListening), STDIO] ==>
-               [TCPSERVER (), STDIO] } Eff ()
-forkServerLoop = do
-  -- Accept, and perform the "receive" program with the new socket.
-  OperationSuccess _ <- forkAccept receive
-       | RecoverableError _ => forkServerLoop
-       | FatalError err => do putStr ("Error accepting: " ++ (show err)) 
-                              finaliseServer
-       | ConnectionClosed => return ()
-  forkServerLoop
+-- forkServerLoop : { [TCPSERVER (ServerListening), STDIO] ==>
+--                [TCPSERVER (), STDIO] } Eff ()
+-- forkServerLoop = do
+--   -- Accept, and perform the "receive" program with the new socket.
+--   OperationSuccess _ <- forkAccept receive
+--        | RecoverableError _ => forkServerLoop
+--        | FatalError err => do putStr ("Error accepting: " ++ (show err))
+--                               finaliseServer
+--        | ConnectionClosed => return ()
+--   forkServerLoop
 
-serverLoop : { [TCPSERVER (ServerListening), STDIO] ==>
-               [TCPSERVER (), STDIO] } Eff ()
+serverLoop : { [STDIO, TCPSERVER (ServerListening)] ==>
+               [STDIO, TCPSERVER ()] } Eff ()
 serverLoop = do
   -- Accept, and perform the "receive" program with the new socket.
   OperationSuccess _ <- accept receive
     | RecoverableError _ => serverLoop
-    | FatalError err => do putStr ("Error accepting: " ++ (show err)) 
+    | FatalError err => do putStr ("Error accepting: " ++ (show err))
                            finaliseServer
     | ConnectionClosed => return ()
   serverLoop
 
 setupServer : Port -> Bool ->
-              { [TCPSERVER (), STDIO] } Eff ()
+              { [STDIO, TCPSERVER ()] } Eff ()
 setupServer port do_fork = do
   putStr "Binding\n" 
   OperationSuccess _ <- bind Nothing port
@@ -65,7 +66,8 @@ setupServer port do_fork = do
                            finaliseServer
     | ConnectionClosed => return ()
   putStr "Listening\n"
-  if do_fork then forkServerLoop else serverLoop
+  serverLoop
+  --if do_fork then forkServerLoop else serverLoop
 
 
 main : IO ()

@@ -1,8 +1,10 @@
 module IdrisNet.Packet
 import Language.Reflection
 import IdrisNet.PacketLang
-import IdrisNet.Socket
+import Network.Socket
 import Effects
+import Data.So
+
 
 %access public 
 %include C "bindata.h"
@@ -28,32 +30,32 @@ data ActivePacket : Type where
 public
 dumpPacket : BufPtr -> Length -> IO ()
 dumpPacket (BPtr pckt) len =
-  mkForeign (FFun "dumpPacket" [FPtr, FInt] FUnit) pckt len
+  foreign FFI_C "dumpPacket" (Ptr -> Int -> IO Unit) pckt len
 
 
 {- Internal FFI Functions -}
 foreignCreatePacket : Int -> IO BufPtr
-foreignCreatePacket len = map BPtr $ mkForeign (FFun "newPacket" [FInt] FPtr) len
+foreignCreatePacket len = map BPtr $ foreign FFI_C "newPacket" (Int -> IO Ptr) len
 
 foreignSetByte : BufPtr -> Position -> ByteData -> IO ()
 foreignSetByte (BPtr pckt) dat pos = 
-  mkForeign (FFun "setPacketByte" [FPtr, FInt, FInt] FUnit) pckt dat pos
+  foreign FFI_C "setPacketByte" (Ptr -> Int -> Int -> IO Unit) pckt dat pos
 
 foreignSetBits : BufPtr -> Position -> Position -> ByteData -> IO ()
 foreignSetBits (BPtr pckt) start end dat = 
-  mkForeign (FFun "setPacketBits" [FPtr, FInt, FInt, FInt] FUnit) pckt start end dat
+  foreign FFI_C "setPacketBits" (Ptr -> Int -> Int -> Int -> IO Unit) pckt start end dat
 
 foreignSetString : BufPtr -> Position -> String -> Int -> Char -> IO ()
 foreignSetString (BPtr pckt) start dat len term =
-  mkForeign (FFun "setPacketString" [FPtr, FInt, FString, FInt, FChar] FUnit) pckt start dat len term
+  foreign FFI_C "setPacketString" (Ptr -> Int -> String -> Int -> Char -> IO Unit) pckt start dat len term
 
 foreignGetByte : BufPtr -> Position -> IO ByteData
 foreignGetByte (BPtr pckt) pos = 
-  mkForeign (FFun "getPacketByte" [FPtr, FInt] FInt) pckt pos
+  foreign FFI_C "getPacketByte" (Ptr -> Int -> IO Int) pckt pos
 
 foreignGetBits : BufPtr -> Position -> Position -> IO ByteData
 foreignGetBits (BPtr pckt) start end =
-  mkForeign (FFun "getPacketBits" [FPtr, FInt, FInt] FInt) pckt start end
+  foreign FFI_C "getPacketBits" (Ptr -> Int -> Int -> IO Int) pckt start end
 
 {- Marshalling -}
 
@@ -63,7 +65,7 @@ marshalChunk (ActivePacketRes pckt pos p_len) (Bit w p) (BInt dat p2) = do
   foreignSetBits pckt pos (pos + (natToInt w) - 1) dat
   return len
 marshalChunk (ActivePacketRes pckt pos p_len) CBool b = do
-  let bit = if b then 1 else 0
+  let bit = the Int $ if b then 1 else 0
   foreignSetBits pckt pos pos bit
   return (chunkLength CBool b)
 marshalChunk (ActivePacketRes pckt pos p_len) CString str = do
@@ -176,7 +178,7 @@ unmarshalBits (ActivePacketRes pckt pos p_len) (Bit width p) with ((pos + (natTo
   | True = do
     res <- foreignGetBits pckt pos (pos + (natToInt width) - 1)
     --putStrLn $ "Read: " ++ show res
-    return $ Just $ (BInt res (assert_total $ believe_me oh), (natToInt width)) -- Have to trust it, as it's from C
+    return $ Just $ (BInt res (assert_total $ believe_me Oh), (natToInt width)) -- Have to trust it, as it's from C
   | False = return Nothing
 unmarshalBits _ _ = return Nothing
 
@@ -227,7 +229,7 @@ unmarshalChunk (ActivePacketRes pckt pos p_len) (Decodable n t decode_fn _) = do
   let end_pos = (pos + len)
   if (end_pos <= p_len) then do
     dat <- foreignGetBits pckt pos (end_pos - 1) 
-    case (decode_fn (BInt dat (believe_me oh))) of -- Decode using supplied fn
+    case (decode_fn (BInt dat (believe_me Oh))) of -- Decode using supplied fn
       Just decoded_val => return $ Just (decoded_val, len)
       Nothing => return Nothing
   else return Nothing -- Out of bounds
@@ -315,6 +317,6 @@ unmarshal pl pckt len = do
 -- | Destroys a BufPtr
 public
 freePacket : BufPtr -> IO ()
-freePacket (BPtr pckt) = mkForeign (FFun "freePacket" [FPtr] FUnit) pckt
+freePacket (BPtr pckt) = foreign FFI_C "freePacket" (Ptr -> IO Unit) pckt
 
 

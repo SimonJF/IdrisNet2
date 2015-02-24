@@ -1,5 +1,6 @@
 module PacketStruct
 import IdrisNet.PacketLang
+import Data.So
 
 %access public
 
@@ -15,7 +16,7 @@ simpleStruct = do
                 (prop_bool b1)) 
 
 myBoundedInt : Bounded 32
-myBoundedInt = BInt 9001 oh
+myBoundedInt = BInt 9001 Oh
 
 simpleStructInstance : (mkTy simpleStruct)
 simpleStructInstance = ("hello" ##
@@ -24,7 +25,7 @@ simpleStructInstance = ("hello" ##
                         ["hello", "you", "dears"] ##
                         True ##
                         False ##
-                        (Right oh))
+                        (Right Oh))
 
 simpleResponse : PacketLang
 simpleResponse = do
