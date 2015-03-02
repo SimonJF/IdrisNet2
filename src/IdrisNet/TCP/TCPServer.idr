@@ -48,8 +48,8 @@ interpTCPServerBindRes : SocketOperationRes a -> Type
 interpTCPServerBindRes (OperationSuccess _) = ServerBound
 interpTCPServerBindRes _ = ()
 
-{- This is an effect that deals with an accepted client. We're allowed to 
-   read from, write to, and close this socket. 
+{- This is an effect that deals with an accepted client. We're allowed to
+   read from, write to, and close this socket.
    An effectual program of type TCPSERVERCLIENT will be runInit, initially in the
    ClientConnected state, upon acceptance of a client. This will be given in the
    form of an argument to Accept. The effectual program must end by closing the socket. -}
@@ -58,8 +58,8 @@ data TCPServerClient : Effect where
                           TCPServerClient (SocketOperationRes ByteLength)
   ReadString : ByteLength -> { ClientConnected ==> interpClientOperationRes result }
                              TCPServerClient (SocketOperationRes (String, ByteLength))
-  CloseClient : { ClientConnected ==> () } TCPServerClient () 
-  FinaliseClient : { ClientError ==> () }  TCPServerClient () 
+  CloseClient : { ClientConnected ==> () } TCPServerClient ()
+  FinaliseClient : { ClientError ==> () }  TCPServerClient ()
   WritePacket  : (pl : PacketLang) ->
                  (mkTy pl) ->
                  { ClientConnected ==> interpClientOperationRes result }
@@ -71,17 +71,17 @@ data TCPServerClient : Effect where
                  TCPServerClient (SocketOperationRes (Maybe (mkTy pl, ByteLength)))
 
 
-TCPSERVERCLIENT : Type -> EFFECT 
+TCPSERVERCLIENT : Type -> EFFECT
 TCPSERVERCLIENT t = MkEff t TCPServerClient
 
 -- Send a string to the accepted client
-tcpSend : String -> { [TCPSERVERCLIENT (ClientConnected)] ==> 
+tcpSend : String -> { [TCPSERVERCLIENT (ClientConnected)] ==>
                       [TCPSERVERCLIENT (interpClientOperationRes result)] }
                     Eff (SocketOperationRes ByteLength)
 tcpSend s = call (WriteString s)
 
 -- Receive a string from the accepted client
-tcpRecv : ByteLength -> { [TCPSERVERCLIENT (ClientConnected)] ==> 
+tcpRecv : ByteLength -> { [TCPSERVERCLIENT (ClientConnected)] ==>
                           [TCPSERVERCLIENT (interpClientOperationRes result)] }
                         Eff (SocketOperationRes (String, ByteLength))
 tcpRecv bl = call (ReadString bl)
@@ -97,7 +97,7 @@ tcpFinalise = call FinaliseClient
 -- Write a PacketLang packet
 tcpWritePacket : (pl : PacketLang) ->
                  (mkTy pl) ->
-                 { [TCPSERVERCLIENT ClientConnected] ==> 
+                 { [TCPSERVERCLIENT ClientConnected] ==>
                    [TCPSERVERCLIENT (interpClientOperationRes result)] }
                  Eff (SocketOperationRes ByteLength)
 tcpWritePacket pl dat = call (WritePacket pl dat)
@@ -105,49 +105,49 @@ tcpWritePacket pl dat = call (WritePacket pl dat)
 -- Read a PacketLang packet
 tcpReadPacket : (pl : PacketLang) ->
                 Length -> -- TODO: Ideally we won't need this parameter
-                { [TCPSERVERCLIENT ClientConnected] ==> 
+                { [TCPSERVERCLIENT ClientConnected] ==>
                   [TCPSERVERCLIENT (interpClientOperationRes result)] }
-                Eff (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
+                Eff (SocketOperationRes (Maybe (mkTy pl, ByteLength)))
 tcpReadPacket pl len = call (ReadPacket pl len)
 
 -- The type of client programs. Starts in ClientConnected, but must end unconnected.
-ClientProgram : Type -> Type
-ClientProgram t = {[TCPSERVERCLIENT (ClientConnected)] ==> 
-                   [TCPSERVERCLIENT ()]} Eff t
+ClientProgram : (effl: List EFFECT) -> Type -> Type
+ClientProgram effl t = {TCPSERVERCLIENT (ClientConnected) :: effl ==>
+                        TCPSERVERCLIENT () :: effl} Eff t
 
 instance Handler TCPServerClient IO where
   handle (CC sock addr) (WriteString str) k = do
     send_res <- send sock str
-    case send_res of 
-      Left err => 
+    case send_res of
+      Left err =>
         if (err == EAGAIN) then
           k (RecoverableError err) (CC sock addr)
         else
-          k (FatalError err) (CE sock) 
-      Right bl => k (OperationSuccess bl) (CC sock addr) 
+          k (FatalError err) (CE sock)
+      Right bl => k (OperationSuccess bl) (CC sock addr)
 
   handle (CC sock addr) (ReadString bl) k = do
     recv_res <- recv sock bl
     case recv_res of
       Left err =>
         if err == EAGAIN then
-          k (RecoverableError err) (CC sock addr)  
+          k (RecoverableError err) (CC sock addr)
         else if err == 0 then do -- Socket closed
           close sock
           k (ConnectionClosed) ()
         else k (FatalError err) (CE sock)
       Right (str, bl) => k (OperationSuccess (str, bl)) (CC sock addr)
 
-  handle (CC sock addr) (CloseClient) k = 
+  handle (CC sock addr) (CloseClient) k =
     close sock $> k () ()
-  handle (CE sock) (FinaliseClient) k = 
+  handle (CE sock) (FinaliseClient) k =
     close sock $> k () ()
 
   handle (CC sock addr) (WritePacket pl dat) k = do
     (pckt, len) <- marshal pl dat
     send_res <- sendBuf sock pckt len
     case send_res of
-         Left err => 
+         Left err =>
           if err == EAGAIN then
             k (RecoverableError err) (CC sock addr)
           else
@@ -172,29 +172,29 @@ instance Handler TCPServerClient IO where
            -- The OperationSuccess depends on the actual network-y
            -- part, not the unmarshalling. If the unmarshalling fails,
            -- we still keep the connection open.
-           k (OperationSuccess res) (CC sock addr) 
+           k (OperationSuccess res) (CC sock addr)
 
 data TCPServer : Effect where
   -- TCPServerBind a socket to a given address and port
-  TCPServerBind : (Maybe SocketAddress) -> 
-                  Port -> 
+  TCPServerBind : (Maybe SocketAddress) ->
+                  Port ->
                   { () ==> interpTCPServerBindRes result }
-                   TCPServer (SocketOperationRes ()) 
+                   TCPServer (SocketOperationRes ())
   -- Listen
-  Listen : { ServerBound ==> interpListenRes result } 
-           TCPServer (SocketOperationRes ()) 
+  Listen : { ServerBound ==> interpListenRes result }
+           TCPServer (SocketOperationRes ())
   -- Accept
-  Accept :  ClientProgram t ->
-            { ServerListening ==> interpOperationRes result } 
+  Accept :  ClientProgram effl t -> (Env IO effl) ->
+            { ServerListening ==> interpOperationRes result }
             TCPServer (SocketOperationRes t)
-  ForkAccept : ClientProgram () ->
-               { ServerListening ==> interpOperationRes result } 
+  ForkAccept : ClientProgram effl () -> (Env IO effl) ->
+               { ServerListening ==> interpOperationRes result }
                TCPServer (SocketOperationRes ())
   -- Need separate ones for each. It'd be nice to condense these into 1...
-  CloseBound : { ServerBound ==> () } TCPServer () 
-  CloseListening : { ServerListening ==> () } TCPServer () 
-  Finalise : { ServerError ==> () } TCPServer () 
-  
+  CloseBound : { ServerBound ==> () } TCPServer ()
+  CloseListening : { ServerListening ==> () } TCPServer ()
+  Finalise : { ServerError ==> () } TCPServer ()
+
 
 TCPSERVER : Type -> EFFECT
 TCPSERVER t = MkEff t TCPServer
@@ -202,28 +202,28 @@ TCPSERVER t = MkEff t TCPServer
 {- TCP Accessor Functions -}
 
 -- Binds to a socket address, if given, and a port
-bind : (Maybe SocketAddress) -> 
-       Port -> { [TCPSERVER ()] ==> 
-                 [TCPSERVER (interpTCPServerBindRes result)] } 
+bind : (Maybe SocketAddress) ->
+       Port -> { [TCPSERVER ()] ==>
+                 [TCPSERVER (interpTCPServerBindRes result)] }
                 Eff (SocketOperationRes ())
 bind sa p = call (TCPServerBind sa p)
 
 -- Listens on a bound socket
-listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] } 
+listen : { [TCPSERVER (ServerBound)] ==> [TCPSERVER (interpListenRes result)] }
          Eff (SocketOperationRes ())
 listen = call Listen
 
 -- Accepts a new client, and runs the given client program
-accept : (ClientProgram t) -> 
-         { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)] }
-         Eff (SocketOperationRes t)
-accept prog = call (Accept prog)
+accept : (ClientProgram effl t) -> (Env IO effl) ->
+       { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)]}
+       Eff (SocketOperationRes t)
+accept prog env = call (Accept prog env)
 
 -- Accepts in a different thread
-forkAccept : (ClientProgram ()) -> 
-         { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)] }
+forkAccept : (ClientProgram effl ()) -> (Env IO effl) ->
+         { [TCPSERVER (ServerListening)] ==> [TCPSERVER (interpOperationRes result)]}
          Eff (SocketOperationRes ())
-forkAccept prog = call (ForkAccept prog)
+forkAccept prog env = call (ForkAccept prog env)
 
 -- Close a bound server socket
 closeBound : { [TCPSERVER (ServerBound)] ==> [TCPSERVER ()] } Eff ()
@@ -251,7 +251,7 @@ instance Handler TCPServer IO where
         else do
           close sock
           k (FatalError bind_res) ()
-          
+
   handle (SB sock) (Listen) k = do
     listen_res <- listen sock
     if listen_res == 0 then
@@ -260,37 +260,36 @@ instance Handler TCPServer IO where
     else
       k (FatalError listen_res) (SE sock)
 
-  handle (SL sock) (Accept prog) k = do
+  handle (SL sock) (Accept prog env) k = do
     accept_res <- accept sock
     case accept_res of
          Left err => do
-           if err == EAGAIN then 
+           if err == EAGAIN then
              k (RecoverableError err) (SL sock)
-           else 
-             k (FatalError err) (SE sock) 
+           else
+             k (FatalError err) (SE sock)
          Right (client_sock, addr) => do
-           res <- runInit [(CC client_sock addr)] prog
-           k (OperationSuccess res) (SL sock)  
+           res <- runInit ((CC client_sock addr) :: env) prog
+           k (OperationSuccess res) (SL sock)
 
-  handle (SL sock) (ForkAccept prog) k = do
+  handle (SL sock) (ForkAccept prog env) k = do
     accept_res <- accept sock
     case accept_res of
          Left err => do
-           if err == EAGAIN then 
+           if err == EAGAIN then
              k (RecoverableError err) (SL sock)
-           else 
-             k (FatalError err) (SE sock) 
+           else
+             k (FatalError err) (SE sock)
          Right (client_sock, addr) => do
-           fork (runInit [(CC client_sock addr)] prog $> return ())
-           k (OperationSuccess ()) (SL sock)  
+           fork (runInit ((CC client_sock addr) :: env) prog $> return ())
+           k (OperationSuccess ()) (SL sock)
 
-  handle (SB sock) (CloseBound) k = 
+  handle (SB sock) (CloseBound) k =
     close sock $> k () ()
 
-  handle (SL sock) (CloseListening) k = 
+  handle (SL sock) (CloseListening) k =
     close sock $> k () ()
 
-  handle (SE sock) (Finalise) k = 
+  handle (SE sock) (Finalise) k =
     close sock $> k () ()
-
 
