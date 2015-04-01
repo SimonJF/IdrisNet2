@@ -7,12 +7,12 @@ import IdrisNet.UDP.UDPCommon
 %access public
 
 {- UDP server sockets need to *bind* to a port in order to receive,
- - but don't need to listen or accept. This really simplifies the 
+ - but don't need to listen or accept. This really simplifies the
  - state machine :)
 -}
 
 -- Bound State
-data UDPBound : Type where 
+data UDPBound : Type where
   UDPB : Socket -> UDPBound
 
 -- Error State
@@ -32,9 +32,9 @@ interpUDPOperationRes (UDPRecoverableError _) = UDPBound
 
 {- UDP Server Effect -}
 data UDPServer : Effect where
-  UDPSBind : (Maybe SocketAddress) -> 
-             Port -> 
-             { () ==> interpUDPBindRes result } 
+  UDPSBind : (Maybe SocketAddress) ->
+             Port ->
+             { () ==> {result} interpUDPBindRes result }
              UDPServer (UDPRes ())
 
   UDPSClose : { UDPBound ==> ()} UDPServer ()
@@ -42,28 +42,28 @@ data UDPServer : Effect where
   UDPSWriteString : SocketAddress ->
                     Port ->
                     String ->
-                    { UDPBound ==> interpUDPOperationRes result}
+                    { UDPBound ==> {result} interpUDPOperationRes result}
                     UDPServer (UDPRes ByteLength)
 
   UDPSReadString :  ByteLength ->
-                    { UDPBound ==> interpUDPOperationRes result}
+                    { UDPBound ==> {result} interpUDPOperationRes result}
                     UDPServer (UDPRes (UDPAddrInfo, String, ByteLength))
 
   UDPSWritePacket : SocketAddress ->
-                    Port -> 
+                    Port ->
                     (pl : PacketLang) ->
                     (mkTy pl) ->
-                    { UDPBound ==> interpUDPOperationRes result}
+                    { UDPBound ==> {result} interpUDPOperationRes result}
                     UDPServer (UDPRes ByteLength)
 
   UDPSReadPacket : (pl : PacketLang) ->
                    Length ->
-                   { UDPBound ==> interpUDPOperationRes result}
+                   { UDPBound ==> {result} interpUDPOperationRes result}
                    UDPServer (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength)))
 
   UDPSReadPacketBuf : (pl : PacketLang) ->
-                   Length -> 
-                   { UDPBound ==> interpUDPOperationRes result}
+                   Length ->
+                   { UDPBound ==> {result} interpUDPOperationRes result}
                    UDPServer (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength, BufPtr)))
 
   UDPSFinalise : { UDPError ==> () } UDPServer ()
@@ -73,9 +73,9 @@ UDPSERVER : Type -> EFFECT
 UDPSERVER t = MkEff t UDPServer
 
 -- Binds to a socket address (if not given, any available one) and a port
-udpBind : (Maybe SocketAddress) -> 
-          Port -> 
-          { [UDPSERVER ()] ==> [UDPSERVER (interpUDPBindRes result)] }
+udpBind : (Maybe SocketAddress) ->
+          Port ->
+          { [UDPSERVER ()] ==> {result} [UDPSERVER (interpUDPBindRes result)] }
           Eff (UDPRes ())
 udpBind sa p = call (UDPSBind sa p)
 
@@ -84,40 +84,45 @@ udpClose : { [UDPSERVER UDPBound] ==> [UDPSERVER ()] } Eff ()
 udpClose = call UDPSClose
 
 -- Writes a string to the given remote host
-udpWriteString : SocketAddress -> 
+udpWriteString : SocketAddress ->
                  Port ->
-                 String -> 
-                 { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
+                 String ->
+                 { [UDPSERVER UDPBound] ==> {result}
+                   [UDPSERVER (interpUDPOperationRes result)]}
                  Eff (UDPRes ByteLength)
 udpWriteString sa p s = call (UDPSWriteString sa p s)
 
 -- Receives a string
-udpReadString : ByteLength -> 
-                { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]} 
+udpReadString : ByteLength ->
+                { [UDPSERVER UDPBound] ==> {result}
+                  [UDPSERVER (interpUDPOperationRes result)]}
                 Eff (UDPRes (UDPAddrInfo, String, ByteLength))
 udpReadString len = call (UDPSReadString len)
 
 -- Writes a PacketLang packet
-udpWritePacket : SocketAddress -> 
+udpWritePacket : SocketAddress ->
                  Port ->
                  (pl : PacketLang) ->
                  (mkTy pl) ->
-                 { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
+                 { [UDPSERVER UDPBound] ==> {result}
+                   [UDPSERVER (interpUDPOperationRes result)]}
                  Eff (UDPRes ByteLength)
 udpWritePacket sa p pl pckt = call (UDPSWritePacket sa p pl pckt)
 
 -- Reads a PacketLang packet
 udpReadPacket : (pl : PacketLang) ->
                 Length ->
-                { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
-                Eff (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength))) 
+                { [UDPSERVER UDPBound] ==> {result}
+                  [UDPSERVER (interpUDPOperationRes result)]}
+                Eff (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength)))
 udpReadPacket pl len = call (UDPSReadPacket pl len)
 
 -- Reads a PacketLang packet but retains the buffer
 udpReadPacket' : (pl : PacketLang) ->
                 Length ->
-                { [UDPSERVER UDPBound] ==> [UDPSERVER (interpUDPOperationRes result)]}
-                Eff (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength, BufPtr))) 
+                { [UDPSERVER UDPBound] ==> {result}
+                  [UDPSERVER (interpUDPOperationRes result)]}
+                Eff (UDPRes (UDPAddrInfo, Maybe (mkTy pl, ByteLength, BufPtr)))
 udpReadPacket' pl len = call (UDPSReadPacketBuf pl len)
 
 udpFinalise : { [UDPSERVER UDPError] ==> [UDPSERVER ()]} Eff ()
@@ -153,14 +158,14 @@ instance Handler UDPServer IO where
         else
           k (UDPFailure err) (UDPE sock)
       Right bl => k (UDPSuccess bl) (UDPB sock)
-         
+
 
   handle (UDPB sock) (UDPSReadString bl) k = do
     recv_res <- recvFrom sock bl
     case recv_res of
       Left err =>
         if err == EAGAIN then
-          k (UDPRecoverableError err) (UDPB sock)  
+          k (UDPRecoverableError err) (UDPB sock)
         else k (UDPFailure err) (UDPE sock)
       Right (addr, str, bl) => k (UDPSuccess (addr, str, bl)) (UDPB sock)
 
@@ -169,7 +174,7 @@ instance Handler UDPServer IO where
     dumpPacket pckt (len * 8)
     send_res <- sendToBuf sock sa p pckt len
     case send_res of
-         Left err => 
+         Left err =>
           if err == EAGAIN then
             k (UDPRecoverableError err) (UDPB sock)
           else
@@ -191,7 +196,7 @@ instance Handler UDPServer IO where
            -- The UDPSuccess depends on the actual network-y
            -- part, not the unmarshalling. If the unmarshalling fails,
            -- we still keep the connection open.
-           k (UDPSuccess (addr, res)) (UDPB sock) 
+           k (UDPSuccess (addr, res)) (UDPB sock)
 
   handle (UDPB sock) (UDPSReadPacketBuf pl len) k = do
     ptr <- sock_alloc len
@@ -204,11 +209,10 @@ instance Handler UDPServer IO where
              k (UDPFailure err) (UDPE sock)
          Right (addr, bl) => do
            res <- unmarshal pl ptr bl
-           case res of 
+           case res of
              Just (pckt', bl') => do
                k (UDPSuccess (addr, Just (pckt', bl', ptr))) (UDPB sock)
-             Nothing => sock_free ptr $> k (UDPSuccess (addr, Nothing)) (UDPB sock)
+             Nothing => sock_free ptr *> k (UDPSuccess (addr, Nothing)) (UDPB sock)
            -- The UDPSuccess depends on the actual network-y
            -- part, not the unmarshalling. If the unmarshalling fails,
            -- we still keep the connection open.
-

@@ -52,5 +52,5 @@ getDomainFragment = do
   map ((split ((==) '.')) . trim) getLine
 
 main : IO ()
-main = run (dnsRespTest !getDomainFragment 4099 (IPv4Addr 138 251 206 2) 53) $> main
+main = run (dnsRespTest !getDomainFragment 4099 (IPv4Addr 138 251 206 2) 53) *> main
 

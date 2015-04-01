@@ -11,14 +11,14 @@ import Effects
 data ClientConnected : Type where
   CC : Socket -> ClientConnected
 
--- State recording that an error occurred (therefore no operations 
+-- State recording that an error occurred (therefore no operations
 -- may be performed)
 data ErrorState : Type where
   ES : Socket -> ErrorState
 
--- Interprets the result of 
+-- Interprets the result of
 interpConnectRes : SocketOperationRes a -> Type
-interpConnectRes (OperationSuccess _) = ClientConnected 
+interpConnectRes (OperationSuccess _) = ClientConnected
 interpConnectRes _ = ()
 
 -- Interprets the result of a socket operation (for example reading, writing or binding
@@ -30,26 +30,26 @@ interpOperationRes ConnectionClosed = ()
 
 -- TCP Client Effect
 data TCPClient : Effect where
-  Connect      : SocketAddress -> Port -> {() ==> interpConnectRes result}
+  Connect      : SocketAddress -> Port -> {() ==> {result} interpConnectRes result}
                                           TCPClient (SocketOperationRes Socket)
-  Close        : { ClientConnected ==> ()} TCPClient () 
-  Finalise     : { ErrorState ==> () } TCPClient () 
-  WriteString  : String -> { ClientConnected ==> interpOperationRes result}
-                           TCPClient (SocketOperationRes ByteLength) 
-  ReadString   : ByteLength -> 
-                 { ClientConnected ==> interpOperationRes result }
+  Close        : { ClientConnected ==> ()} TCPClient ()
+  Finalise     : { ErrorState ==> () } TCPClient ()
+  WriteString  : String -> { ClientConnected ==> {result} interpOperationRes result}
+                           TCPClient (SocketOperationRes ByteLength)
+  ReadString   : ByteLength ->
+                 { ClientConnected ==> {result} interpOperationRes result }
                  TCPClient (SocketOperationRes (String, ByteLength))
 
   WritePacket  : (pl : PacketLang) ->
                  (mkTy pl) ->
-                 { ClientConnected ==> interpOperationRes result }
+                 { ClientConnected ==> {result} interpOperationRes result }
                  TCPClient (SocketOperationRes ByteLength)
 
   ReadPacket   : (pl : PacketLang) ->
                  Length -> -- I really dislike this sod being here
-                 { ClientConnected ==> interpOperationRes result }
+                 { ClientConnected ==> {result} interpOperationRes result }
                  TCPClient (SocketOperationRes (Maybe (mkTy pl, ByteLength)))
-                 
+
 
 
 TCPCLIENT : Type -> EFFECT
@@ -57,8 +57,9 @@ TCPCLIENT t = MkEff t TCPClient
 
 -- Attempts to connect to a remote host and port. If it fails, remains in
 -- the uninitialised state. If it succeeds, transitions to ClientConnected.
-tcpConnect : SocketAddress -> Port -> { [TCPCLIENT ()] ==> [TCPCLIENT (interpConnectRes result)] }
-                                      Eff (SocketOperationRes Socket) 
+tcpConnect : SocketAddress -> Port -> { [TCPCLIENT ()] ==> {result}
+                                        [TCPCLIENT (interpConnectRes result)] }
+                                      Eff (SocketOperationRes Socket)
 tcpConnect sa port = call (Connect sa port)
 
 -- Closes a connected socket.
@@ -66,28 +67,28 @@ tcpClose : { [TCPCLIENT (ClientConnected)] ==> [TCPCLIENT ()] } Eff ()
 tcpClose = call Close
 
 -- Finalises a socket that has errored
-tcpFinalise : { [TCPCLIENT (ErrorState)] ==> [TCPCLIENT ()] } Eff () 
+tcpFinalise : { [TCPCLIENT (ErrorState)] ==> [TCPCLIENT ()] } Eff ()
 tcpFinalise = call Finalise
 
 {- vv These may all fail, so must be checked for failures after the operations -}
 
 -- Sends a string
-tcpSend : String -> { [TCPCLIENT (ClientConnected)] ==> 
+tcpSend : String -> { [TCPCLIENT (ClientConnected)] ==> {result}
                       [TCPCLIENT (interpOperationRes result)] }
                      Eff (SocketOperationRes ByteLength)
 tcpSend dat = call (WriteString dat)
 
 -- Receives a string
-tcpRecv : ByteLength -> 
-          { [TCPCLIENT (ClientConnected)] ==> 
-            [TCPCLIENT (interpOperationRes result)] } 
+tcpRecv : ByteLength ->
+          { [TCPCLIENT (ClientConnected)] ==> {result}
+            [TCPCLIENT (interpOperationRes result)] }
           Eff (SocketOperationRes (String, ByteLength))
 tcpRecv bl = call (ReadString bl)
 
 -- Sends a PacketLang packet
 tcpWritePacket : (pl : PacketLang) ->
                  (mkTy pl) ->
-                 { [TCPCLIENT ClientConnected] ==> 
+                 { [TCPCLIENT ClientConnected] ==> {result}
                    [TCPCLIENT (interpOperationRes result)] }
                  Eff (SocketOperationRes ByteLength)
 tcpWritePacket pl dat = call (WritePacket pl dat)
@@ -95,14 +96,15 @@ tcpWritePacket pl dat = call (WritePacket pl dat)
 -- Receives a PacketLang packet
 tcpReadPacket : (pl : PacketLang) ->
                 Length -> -- TODO: Ideally we won't need this parameter
-                { [TCPCLIENT ClientConnected] ==> [TCPCLIENT (interpOperationRes result)] }
-                Eff (SocketOperationRes (Maybe (mkTy pl, ByteLength))) 
+                { [TCPCLIENT ClientConnected] ==> {result}
+                  [TCPCLIENT (interpOperationRes result)] }
+                Eff (SocketOperationRes (Maybe (mkTy pl, ByteLength)))
 tcpReadPacket pl len = call (ReadPacket pl len)
 
 instance Handler TCPClient IO where
   handle () (Connect sa port) k = do
     -- Firstly create a socket
-    sock_res <- socket AF_INET Stream 0 
+    sock_res <- socket AF_INET Stream 0
     case sock_res of
          Left err => k (FatalError err) ()
          Right sock => do
@@ -124,7 +126,7 @@ instance Handler TCPClient IO where
   handle (CC sock) (WriteString dat) k = do
     send_res <- send sock dat
     case send_res of
-      Left err => 
+      Left err =>
       -- Some errors are benign, meaning the connection survives.
         if (err == EAGAIN) then
           k (RecoverableError err) (CC sock)
@@ -135,9 +137,9 @@ instance Handler TCPClient IO where
 
   handle (CC sock) (ReadString byte_len) k = do
     recv_res <- recv sock byte_len
-    either (\err => if (err == EAGAIN) then 
+    either (\err => if (err == EAGAIN) then
                                k (RecoverableError err) (CC sock)
-                             else 
+                             else
                                if (err == 0) then -- socket closed
                                  k (ConnectionClosed) ()
                                else
@@ -148,7 +150,7 @@ instance Handler TCPClient IO where
     (pckt, len) <- marshal pl dat
     send_res <- sendBuf sock pckt len
     case send_res of
-         Left err => 
+         Left err =>
           if err == EAGAIN then
             k (RecoverableError err) (CC sock)
           else
@@ -172,5 +174,4 @@ instance Handler TCPClient IO where
            -- The OperationSuccess depends on the actual network-y
            -- part, not the unmarshalling. If the unmarshalling fails,
            -- we still keep the connection open.
-           k (OperationSuccess res) (CC sock) 
-
+           k (OperationSuccess res) (CC sock)
