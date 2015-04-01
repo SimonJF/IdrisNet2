@@ -10,7 +10,7 @@ modules = IdrisNet.Packet,
           IdrisNet.UDP.UDPCommon,
           IdrisNet.UDP.UDPServer,
           Effect.Process
-opts = "--partial -p effects" 
+opts = "--partial -p effects -p contrib" 
 makefile = MakefileC
 
 objs = bindata.o, bindata.h, idrisnet.o, idrisnet.h
