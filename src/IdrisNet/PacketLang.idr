@@ -43,10 +43,13 @@ mkBounded b i_n =
       Left yes => Just (BInt i_n yes)
       Right _ => Nothing 
 
+NonZero : Nat -> Type
+NonZero n = n `GT` 0
+
 -- Primitive Binary Chunks
 data Chunk : Type where
   -- Bits must be at least 1 wide
-  Bit : (width : Nat) -> So (width > 0) -> Chunk
+  Bit : (width : Nat) -> NonZero width -> Chunk
   -- Boolean value, stored as one bit.
   -- Convenience, so we can marshal / unmarshal directly as a Bool
   CBool : Chunk
@@ -146,9 +149,7 @@ bitLength (c >>= k) (a ** b) = bitLength c a + bitLength (k a) b
 
 
 -- Syntax rules, so it's nicer to write these things...
-bit : (w : Nat) -> {default tactics { refine oh; solve; } 
-                     p : So (w > 0) } 
-                -> Chunk
+bit : (w : Nat) -> {auto p : NonZero w} -> Chunk
 bit w {p} = Bit w p
 
 -- syntax bit [x] = Bit x oh
