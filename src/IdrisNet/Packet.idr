@@ -4,30 +4,31 @@ import IdrisNet.PacketLang
 import Network.Socket
 import Effects
 import Data.So
+import Data.Vect
 
 
-%access public 
+%access public export
 %include C "bindata.h"
 %link C "bindata.o"
 
 -- Type synonyms for different arguments to foreign functions
-public
+public export
 BytePos : Type
 BytePos = Int
 
-public
+public export
 Position : Type
 Position = Int
 
-public
+public export
 ByteData : Type
 ByteData = Int
 
-public
+public export
 data ActivePacket : Type where
   ActivePacketRes : BufPtr -> BytePos -> Length -> ActivePacket
 
-public
+public export
 dumpPacket : BufPtr -> Length -> IO ()
 dumpPacket (BPtr pckt) len =
   foreign FFI_C "dumpPacket" (Ptr -> Int -> IO Unit) pckt len
@@ -122,7 +123,7 @@ marshalList (ActivePacketRes pckt pos p_len) pl (x::xs) = do
 
 
 {- Unmarshalling Code -}
-public
+public export
 unmarshal' : ActivePacket -> (pl : PacketLang) -> Maybe (mkTy pl, Length)
 
 
@@ -290,7 +291,7 @@ unmarshal' (ActivePacketRes pckt pos p_len) (c >>= k) = do
 {- Publicly-Facing Functions... -}
 -- | Given a packet language and a packet, creates a BufPtr that
 -- | may be sent over the network by a UDP or TCP socket
-public
+public export
 marshal : (pl : PacketLang) -> (mkTy pl) -> IO (BufPtr, Length)
 marshal pl dat = do
   let pckt_len = bitLength pl dat
@@ -303,7 +304,7 @@ marshal pl dat = do
   return (pckt, len' + 1)
 
 -- | Given a packet language and a BufPtr, unmarshals the packet
-public 
+public export
 unmarshal : (pl : PacketLang) -> 
             BufPtr -> 
             Length -> 
@@ -315,7 +316,7 @@ unmarshal pl pckt len = do
   
 
 -- | Destroys a BufPtr
-public
+public export
 freePacket : BufPtr -> IO ()
 freePacket (BPtr pckt) = foreign FFI_C "freePacket" (Ptr -> IO Unit) pckt
 
